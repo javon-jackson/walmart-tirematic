@@ -1,0 +1,848 @@
+[
+  {
+    "subRegion": "SO",
+    "state": "AL",
+    "stateSubregionName": "AL_NORTH",
+    "stateSubregionCode": "AL1"
+  },
+  {
+    "subRegion": "SO",
+    "state": "AL",
+    "stateSubregionName": "AL_SOUTH",
+    "stateSubregionCode": "AL2"
+  },
+  {
+    "subRegion": "SO",
+    "state": "AR",
+    "stateSubregionName": "AR_EAST",
+    "stateSubregionCode": "AR1"
+  },
+  {
+    "subRegion": "SO",
+    "state": "AR",
+    "stateSubregionName": "AR_WEST",
+    "stateSubregionCode": "AR2"
+  },
+  {
+    "subRegion": "WE",
+    "state": "AZ",
+    "stateSubregionName": "AZ_NORTH",
+    "stateSubregionCode": "AZ1"
+  },
+  {
+    "subRegion": "WE",
+    "state": "AZ",
+    "stateSubregionName": "AZ_PHOENIX",
+    "stateSubregionCode": "AZ2"
+  },
+  {
+    "subRegion": "WE",
+    "state": "AZ",
+    "stateSubregionName": "AZ_SOUTH",
+    "stateSubregionCode": "AZ3"
+  },
+  {
+    "subRegion": "WE",
+    "state": "CA",
+    "stateSubregionName": "CA_CENTRAL",
+    "stateSubregionCode": "CA1"
+  },
+  {
+    "subRegion": "WE",
+    "state": "CA",
+    "stateSubregionName": "CA_CENTRAL_NORTH",
+    "stateSubregionCode": "CA2"
+  },
+  {
+    "subRegion": "WE",
+    "state": "CA",
+    "stateSubregionName": "CA_CENTRAL_SOUTH",
+    "stateSubregionCode": "CA3"
+  },
+  {
+    "subRegion": "WE",
+    "state": "CA",
+    "stateSubregionName": "CA_CENTRAL_WEST",
+    "stateSubregionCode": "CA4"
+  },
+  {
+    "subRegion": "WE",
+    "state": "CA",
+    "stateSubregionName": "CA_LONG_BEACH",
+    "stateSubregionCode": "CA5"
+  },
+  {
+    "subRegion": "WE",
+    "state": "CA",
+    "stateSubregionName": "CA_LOS_ANGELES",
+    "stateSubregionCode": "CA6"
+  },
+  {
+    "subRegion": "WE",
+    "state": "CA",
+    "stateSubregionName": "CA_LOS_ANGELES_VENTURA_COUNTY",
+    "stateSubregionCode": "CA7"
+  },
+  {
+    "subRegion": "WE",
+    "state": "CA",
+    "stateSubregionName": "CA_NORTH",
+    "stateSubregionCode": "CA8"
+  },
+  {
+    "subRegion": "WE",
+    "state": "CA",
+    "stateSubregionName": "CA_ONTARIO",
+    "stateSubregionCode": "CA9"
+  },
+  {
+    "subRegion": "WE",
+    "state": "CA",
+    "stateSubregionName": "CA_RIVERSIDE_IMPERIAL",
+    "stateSubregionCode": "CA10"
+  },
+  {
+    "subRegion": "WE",
+    "state": "CA",
+    "stateSubregionName": "CA_SAN_BERNARDINO",
+    "stateSubregionCode": "CA11"
+  },
+  {
+    "subRegion": "WE",
+    "state": "CA",
+    "stateSubregionName": "CA_SAN_DIEGO",
+    "stateSubregionCode": "CA12"
+  },
+  {
+    "subRegion": "WE",
+    "state": "CA",
+    "stateSubregionName": "CA_SAN_DIEGO_COUNTY",
+    "stateSubregionCode": "CA13"
+  },
+  {
+    "subRegion": "WE",
+    "state": "CA",
+    "stateSubregionName": "CA_SAN_FRANCISCO",
+    "stateSubregionCode": "CA14"
+  },
+  {
+    "subRegion": "WE",
+    "state": "CA",
+    "stateSubregionName": "CA_SANTA_ANA",
+    "stateSubregionCode": "CA15"
+  },
+  {
+    "subRegion": "WE",
+    "state": "CO",
+    "stateSubregionName": "CO_CENTRAL",
+    "stateSubregionCode": "CO1"
+  },
+  {
+    "subRegion": "WE",
+    "state": "CO",
+    "stateSubregionName": "CO_REST_ALL",
+    "stateSubregionCode": "CO2"
+  },
+  {
+    "subRegion": "NE",
+    "state": "CT",
+    "stateSubregionName": "CT_REST_ALL",
+    "stateSubregionCode": "CT1"
+  },
+  {
+    "subRegion": "NE",
+    "state": "CT",
+    "stateSubregionName": "CT_SOUTH_WEST",
+    "stateSubregionCode": "CT2"
+  },
+  {
+    "subRegion": "SO",
+    "state": "DC",
+    "stateSubregionName": "DC",
+    "stateSubregionCode": "DC"
+  },
+  {
+    "subRegion": "SO",
+    "state": "DE",
+    "stateSubregionName": "DE",
+    "stateSubregionCode": "DE"
+  },
+  {
+    "subRegion": "SO",
+    "state": "FL",
+    "stateSubregionName": "FL_CENTRAL_EAST",
+    "stateSubregionCode": "FL1"
+  },
+  {
+    "subRegion": "SO",
+    "state": "FL",
+    "stateSubregionName": "FL_CENTRAL_WEST",
+    "stateSubregionCode": "FL2"
+  },
+  {
+    "subRegion": "SO",
+    "state": "FL",
+    "stateSubregionName": "FL_MIAMI",
+    "stateSubregionCode": "FL3"
+  },
+  {
+    "subRegion": "SO",
+    "state": "FL",
+    "stateSubregionName": "FL_NORTH",
+    "stateSubregionCode": "FL4"
+  },
+  {
+    "subRegion": "SO",
+    "state": "FL",
+    "stateSubregionName": "FL_SOUTH_EAST",
+    "stateSubregionCode": "FL5"
+  },
+  {
+    "subRegion": "SO",
+    "state": "FL",
+    "stateSubregionName": "FL_SOUTH_WEST",
+    "stateSubregionCode": "FL6"
+  },
+  {
+    "subRegion": "SO",
+    "state": "GA",
+    "stateSubregionName": "GA_ATLANTA",
+    "stateSubregionCode": "GA1"
+  },
+  {
+    "subRegion": "SO",
+    "state": "GA",
+    "stateSubregionName": "GA_CENTRAL",
+    "stateSubregionCode": "GA2"
+  },
+  {
+    "subRegion": "SO",
+    "state": "GA",
+    "stateSubregionName": "GA_NORTH_EAST",
+    "stateSubregionCode": "GA3"
+  },
+  {
+    "subRegion": "SO",
+    "state": "GA",
+    "stateSubregionName": "GA_NORTH_WEST",
+    "stateSubregionCode": "GA4"
+  },
+  {
+    "subRegion": "SO",
+    "state": "GA",
+    "stateSubregionName": "GA_SOUTH",
+    "stateSubregionCode": "GA5"
+  },
+  {
+    "subRegion": "MW",
+    "state": "IA",
+    "stateSubregionName": "IA_CENTRAL",
+    "stateSubregionCode": "IA1"
+  },
+  {
+    "subRegion": "MW",
+    "state": "IA",
+    "stateSubregionName": "IA_REST",
+    "stateSubregionCode": "IA2"
+  },
+  {
+    "subRegion": "WE",
+    "state": "ID",
+    "stateSubregionName": "ID_BOISE_AND_NAMPA",
+    "stateSubregionCode": "ID1"
+  },
+  {
+    "subRegion": "WE",
+    "state": "ID",
+    "stateSubregionName": "ID_NORTH_AND_EAST",
+    "stateSubregionCode": "ID2"
+  },
+  {
+    "subRegion": "MW",
+    "state": "IL",
+    "stateSubregionName": "IL_CHICAGO",
+    "stateSubregionCode": "IL1"
+  },
+  {
+    "subRegion": "MW",
+    "state": "IL",
+    "stateSubregionName": "IL_NORTH_EAST",
+    "stateSubregionCode": "IL2"
+  },
+  {
+    "subRegion": "MW",
+    "state": "IL",
+    "stateSubregionName": "IL_NORTH_WEST",
+    "stateSubregionCode": "IL3"
+  },
+  {
+    "subRegion": "MW",
+    "state": "IL",
+    "stateSubregionName": "IL_SOUTHEAST",
+    "stateSubregionCode": "IL4"
+  },
+  {
+    "subRegion": "MW",
+    "state": "IL",
+    "stateSubregionName": "IL_SOUTHWEST",
+    "stateSubregionCode": "IL5"
+  },
+  {
+    "subRegion": "MW",
+    "state": "IN",
+    "stateSubregionName": "IN_CENTRAL_AND_EAST",
+    "stateSubregionCode": "IN1"
+  },
+  {
+    "subRegion": "MW",
+    "state": "IN",
+    "stateSubregionName": "IN_NORTH",
+    "stateSubregionCode": "IN2"
+  },
+  {
+    "subRegion": "MW",
+    "state": "IN",
+    "stateSubregionName": "IN_SOUTH",
+    "stateSubregionCode": "IN3"
+  },
+  {
+    "subRegion": "MW",
+    "state": "IN",
+    "stateSubregionName": "IN_WEST",
+    "stateSubregionCode": "IN4"
+  },
+  {
+    "subRegion": "MW",
+    "state": "KS",
+    "stateSubregionName": "KS_EAST",
+    "stateSubregionCode": "KS1"
+  },
+  {
+    "subRegion": "MW",
+    "state": "KS",
+    "stateSubregionName": "KS_WEST",
+    "stateSubregionCode": "KS2"
+  },
+  {
+    "subRegion": "SO",
+    "state": "KY",
+    "stateSubregionName": "KY_EAST",
+    "stateSubregionCode": "KY1"
+  },
+  {
+    "subRegion": "SO",
+    "state": "KY",
+    "stateSubregionName": "KY_WEST",
+    "stateSubregionCode": "KY2"
+  },
+  {
+    "subRegion": "SO",
+    "state": "LA",
+    "stateSubregionName": "LA_NORTH",
+    "stateSubregionCode": "LA1"
+  },
+  {
+    "subRegion": "SO",
+    "state": "LA",
+    "stateSubregionName": "LA_SOUTH",
+    "stateSubregionCode": "LA2"
+  },
+  {
+    "subRegion": "NE",
+    "state": "MA",
+    "stateSubregionName": "MA_EAST",
+    "stateSubregionCode": "MA1"
+  },
+  {
+    "subRegion": "NE",
+    "state": "MA",
+    "stateSubregionName": "MA_WEST",
+    "stateSubregionCode": "MA2"
+  },
+  {
+    "subRegion": "SO",
+    "state": "MD",
+    "stateSubregionName": "MD_CENTRAL",
+    "stateSubregionCode": "MD1"
+  },
+  {
+    "subRegion": "SO",
+    "state": "MD",
+    "stateSubregionName": "MD_REST_ALL",
+    "stateSubregionCode": "MD2"
+  },
+  {
+    "subRegion": "NE",
+    "state": "ME",
+    "stateSubregionName": "ME_EAST",
+    "stateSubregionCode": "ME1"
+  },
+  {
+    "subRegion": "NE",
+    "state": "ME",
+    "stateSubregionName": "ME_WEST",
+    "stateSubregionCode": "ME2"
+  },
+  {
+    "subRegion": "MW",
+    "state": "MI",
+    "stateSubregionName": "MI_CENTRAL",
+    "stateSubregionCode": "MI1"
+  },
+  {
+    "subRegion": "MW",
+    "state": "MI",
+    "stateSubregionName": "MI_NORTH",
+    "stateSubregionCode": "MI2"
+  },
+  {
+    "subRegion": "MW",
+    "state": "MI",
+    "stateSubregionName": "MI_SOUTH_EAST",
+    "stateSubregionCode": "MI3"
+  },
+  {
+    "subRegion": "MW",
+    "state": "MN",
+    "stateSubregionName": "MN_CENTRAL_EAST",
+    "stateSubregionCode": "MN1"
+  },
+  {
+    "subRegion": "MW",
+    "state": "MN",
+    "stateSubregionName": "MN_REST_ALL",
+    "stateSubregionCode": "MN2"
+  },
+  {
+    "subRegion": "MW",
+    "state": "MO",
+    "stateSubregionName": "MO_EAST",
+    "stateSubregionCode": "MO1"
+  },
+  {
+    "subRegion": "MW",
+    "state": "MO",
+    "stateSubregionName": "MO_SOUTH",
+    "stateSubregionCode": "MO2"
+  },
+  {
+    "subRegion": "MW",
+    "state": "MO",
+    "stateSubregionName": "MO_WEST",
+    "stateSubregionCode": "MO3"
+  },
+  {
+    "subRegion": "SO",
+    "state": "MS",
+    "stateSubregionName": "MS_NORTH",
+    "stateSubregionCode": "MS1"
+  },
+  {
+    "subRegion": "SO",
+    "state": "MS",
+    "stateSubregionName": "MS_SOUTH",
+    "stateSubregionCode": "MS2"
+  },
+  {
+    "subRegion": "WE",
+    "state": "MT",
+    "stateSubregionName": "MT",
+    "stateSubregionCode": "MT"
+  },
+  {
+    "subRegion": "SO",
+    "state": "NC",
+    "stateSubregionName": "NC_EAST",
+    "stateSubregionCode": "NC1"
+  },
+  {
+    "subRegion": "SO",
+    "state": "NC",
+    "stateSubregionName": "NC_NORTH",
+    "stateSubregionCode": "NC2"
+  },
+  {
+    "subRegion": "SO",
+    "state": "NC",
+    "stateSubregionName": "NC_SOUTH",
+    "stateSubregionCode": "NC3"
+  },
+  {
+    "subRegion": "SO",
+    "state": "NC",
+    "stateSubregionName": "NC_WEST",
+    "stateSubregionCode": "NC4"
+  },
+  {
+    "subRegion": "MW",
+    "state": "ND",
+    "stateSubregionName": "ND",
+    "stateSubregionCode": "ND"
+  },
+  {
+    "subRegion": "MW",
+    "state": "NE",
+    "stateSubregionName": "NE",
+    "stateSubregionCode": "NE"
+  },
+  {
+    "subRegion": "NE",
+    "state": "NH",
+    "stateSubregionName": "NH",
+    "stateSubregionCode": "NH"
+  },
+  {
+    "subRegion": "NE",
+    "state": "NJ",
+    "stateSubregionName": "NJ_CENTRAL",
+    "stateSubregionCode": "NJ1"
+  },
+  {
+    "subRegion": "NE",
+    "state": "NJ",
+    "stateSubregionName": "NJ_NORTH",
+    "stateSubregionCode": "NJ2"
+  },
+  {
+    "subRegion": "NE",
+    "state": "NJ",
+    "stateSubregionName": "NJ_SOUTH",
+    "stateSubregionCode": "NJ3"
+  },
+  {
+    "subRegion": "NE",
+    "state": "NJ",
+    "stateSubregionName": "NJ_KEARNY",
+    "stateSubregionCode": "NJ4"
+  },
+  {
+    "subRegion": "WE",
+    "state": "NM",
+    "stateSubregionName": "NM_CENTRAL",
+    "stateSubregionCode": "NM1"
+  },
+  {
+    "subRegion": "WE",
+    "state": "NM",
+    "stateSubregionName": "NM_REST_ALL",
+    "stateSubregionCode": "NM2"
+  },
+  {
+    "subRegion": "WE",
+    "state": "NV",
+    "stateSubregionName": "NV_LAS_VEGAS",
+    "stateSubregionCode": "NV1"
+  },
+  {
+    "subRegion": "WE",
+    "state": "NV",
+    "stateSubregionName": "NV_NORTH",
+    "stateSubregionCode": "NV2"
+  },
+  {
+    "subRegion": "WE",
+    "state": "NV",
+    "stateSubregionName": "NV_SOUTH",
+    "stateSubregionCode": "NV3"
+  },
+  {
+    "subRegion": "NE",
+    "state": "NY",
+    "stateSubregionName": "NY_BROOKLYN",
+    "stateSubregionCode": "NY1"
+  },
+  {
+    "subRegion": "NE",
+    "state": "NY",
+    "stateSubregionName": "NY_CENTRAL",
+    "stateSubregionCode": "NY2"
+  },
+  {
+    "subRegion": "NE",
+    "state": "NY",
+    "stateSubregionName": "NY_NORTH_CENTRAL",
+    "stateSubregionCode": "NY3"
+  },
+  {
+    "subRegion": "NE",
+    "state": "NY",
+    "stateSubregionName": "NY_NORTH_WEST",
+    "stateSubregionCode": "NY4"
+  },
+  {
+    "subRegion": "NE",
+    "state": "NY",
+    "stateSubregionName": "NY_SOUTH",
+    "stateSubregionCode": "NY5"
+  },
+  {
+    "subRegion": "MW",
+    "state": "OH",
+    "stateSubregionName": "OH_CENTRAL",
+    "stateSubregionCode": "OH1"
+  },
+  {
+    "subRegion": "MW",
+    "state": "OH",
+    "stateSubregionName": "OH_NORTH",
+    "stateSubregionCode": "OH2"
+  },
+  {
+    "subRegion": "MW",
+    "state": "OH",
+    "stateSubregionName": "OH_SOUTH_EAST",
+    "stateSubregionCode": "OH3"
+  },
+  {
+    "subRegion": "MW",
+    "state": "OH",
+    "stateSubregionName": "OH_WEST",
+    "stateSubregionCode": "OH4"
+  },
+  {
+    "subRegion": "SO",
+    "state": "OK",
+    "stateSubregionName": "OK_NORTH_EAST",
+    "stateSubregionCode": "OK1"
+  },
+  {
+    "subRegion": "SO",
+    "state": "OK",
+    "stateSubregionName": "OK_REST_ALL",
+    "stateSubregionCode": "OK2"
+  },
+  {
+    "subRegion": "WE",
+    "state": "OR",
+    "stateSubregionName": "OR_CENTRAL",
+    "stateSubregionCode": "OR1"
+  },
+  {
+    "subRegion": "WE",
+    "state": "OR",
+    "stateSubregionName": "OR_NORTH_WEST",
+    "stateSubregionCode": "OR2"
+  },
+  {
+    "subRegion": "NE",
+    "state": "PA",
+    "stateSubregionName": "PA_CENTRAL",
+    "stateSubregionCode": "PA1"
+  },
+  {
+    "subRegion": "NE",
+    "state": "PA",
+    "stateSubregionName": "PA_CENTRAL_NORTH",
+    "stateSubregionCode": "PA2"
+  },
+  {
+    "subRegion": "NE",
+    "state": "PA",
+    "stateSubregionName": "PA_NORTH_EAST",
+    "stateSubregionCode": "PA3"
+  },
+  {
+    "subRegion": "NE",
+    "state": "PA",
+    "stateSubregionName": "PA_SOUTH",
+    "stateSubregionCode": "PA4"
+  },
+  {
+    "subRegion": "NE",
+    "state": "PA",
+    "stateSubregionName": "PA_WEST",
+    "stateSubregionCode": "PA5"
+  },
+  {
+    "subRegion": "NE",
+    "state": "RI",
+    "stateSubregionName": "RI",
+    "stateSubregionCode": "RI"
+  },
+  {
+    "subRegion": "SO",
+    "state": "SC",
+    "stateSubregionName": "SC_CENTRAL",
+    "stateSubregionCode": "SC1"
+  },
+  {
+    "subRegion": "SO",
+    "state": "SC",
+    "stateSubregionName": "SC_NORTH",
+    "stateSubregionCode": "SC2"
+  },
+  {
+    "subRegion": "SO",
+    "state": "SC",
+    "stateSubregionName": "SC_SOUTH",
+    "stateSubregionCode": "SC3"
+  },
+  {
+    "subRegion": "MW",
+    "state": "SD",
+    "stateSubregionName": "SD_EAST",
+    "stateSubregionCode": "SD1"
+  },
+  {
+    "subRegion": "MW",
+    "state": "SD",
+    "stateSubregionName": "SD_WEST",
+    "stateSubregionCode": "SD2"
+  },
+  {
+    "subRegion": "SO",
+    "state": "TN",
+    "stateSubregionName": "TN_CENTRAL",
+    "stateSubregionCode": "TN1"
+  },
+  {
+    "subRegion": "SO",
+    "state": "TN",
+    "stateSubregionName": "TN_EAST",
+    "stateSubregionCode": "TN2"
+  },
+  {
+    "subRegion": "SO",
+    "state": "TN",
+    "stateSubregionName": "TN_WEST",
+    "stateSubregionCode": "TN3"
+  },
+  {
+    "subRegion": "SO",
+    "state": "TX",
+    "stateSubregionName": "TX_CENTRAL",
+    "stateSubregionCode": "TX1"
+  },
+  {
+    "subRegion": "SO",
+    "state": "TX",
+    "stateSubregionName": "TX_CENTRAL_NORTH",
+    "stateSubregionCode": "TX2"
+  },
+  {
+    "subRegion": "SO",
+    "state": "TX",
+    "stateSubregionName": "TX_CENTRAL_WEST",
+    "stateSubregionCode": "TX3"
+  },
+  {
+    "subRegion": "SO",
+    "state": "TX",
+    "stateSubregionName": "TX_DALLAS",
+    "stateSubregionCode": "TX4"
+  },
+  {
+    "subRegion": "SO",
+    "state": "TX",
+    "stateSubregionName": "TX_HOUSTON",
+    "stateSubregionCode": "TX5"
+  },
+  {
+    "subRegion": "SO",
+    "state": "TX",
+    "stateSubregionName": "TX_NORTH_EAST",
+    "stateSubregionCode": "TX6"
+  },
+  {
+    "subRegion": "SO",
+    "state": "TX",
+    "stateSubregionName": "TX_NORTH_WEST",
+    "stateSubregionCode": "TX7"
+  },
+  {
+    "subRegion": "SO",
+    "state": "TX",
+    "stateSubregionName": "TX_SOUTH",
+    "stateSubregionCode": "TX8"
+  },
+  {
+    "subRegion": "SO",
+    "state": "TX",
+    "stateSubregionName": "TX_SOUTH_EAST",
+    "stateSubregionCode": "TX9"
+  },
+  {
+    "subRegion": "SO",
+    "state": "TX",
+    "stateSubregionName": "TX_SOUTH_WEST",
+    "stateSubregionCode": "TX10"
+  },
+  {
+    "subRegion": "WE",
+    "state": "UT",
+    "stateSubregionName": "UT_NORTH",
+    "stateSubregionCode": "UT1"
+  },
+  {
+    "subRegion": "WE",
+    "state": "UT",
+    "stateSubregionName": "UT_SOUTH",
+    "stateSubregionCode": "UT2"
+  },
+  {
+    "subRegion": "SO",
+    "state": "VA",
+    "stateSubregionName": "VA_CENTRAL",
+    "stateSubregionCode": "VA1"
+  },
+  {
+    "subRegion": "SO",
+    "state": "VA",
+    "stateSubregionName": "VA_NORTH",
+    "stateSubregionCode": "VA2"
+  },
+  {
+    "subRegion": "SO",
+    "state": "VA",
+    "stateSubregionName": "VA_SOUTH_EAST",
+    "stateSubregionCode": "VA3"
+  },
+  {
+    "subRegion": "SO",
+    "state": "VA",
+    "stateSubregionName": "VA_SOUTH_WEST",
+    "stateSubregionCode": "VA4"
+  },
+  {
+    "subRegion": "NE",
+    "state": "VT",
+    "stateSubregionName": "VT",
+    "stateSubregionCode": "VT"
+  },
+  {
+    "subRegion": "WE",
+    "state": "WA",
+    "stateSubregionName": "WA",
+    "stateSubregionCode": "WA"
+  },
+  {
+    "subRegion": "MW",
+    "state": "WI",
+    "stateSubregionName": "WI_EAST",
+    "stateSubregionCode": "WI1"
+  },
+  {
+    "subRegion": "MW",
+    "state": "WI",
+    "stateSubregionName": "WI_WEST",
+    "stateSubregionCode": "WI2"
+  },
+  {
+    "subRegion": "SO",
+    "state": "WV",
+    "stateSubregionName": "WV_EAST",
+    "stateSubregionCode": "WV1"
+  },
+  {
+    "subRegion": "SO",
+    "state": "WV",
+    "stateSubregionName": "WV_WEST",
+    "stateSubregionCode": "WV2"
+  },
+  {
+    "subRegion": "WE",
+    "state": "WY",
+    "stateSubregionName": "WY",
+    "stateSubregionCode": "WY"
+  }
+]
