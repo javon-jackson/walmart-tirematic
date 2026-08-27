@@ -45,7 +45,6 @@
  *   custscript_walqbo_sync_client_id_qbo     - QBO app Client ID
  *   custscript_walqbo_sync_secret_qbo        - QBO app Client Secret (Password field type)
  *   custscript_walqbo_sync_qbo_company_id    - QBO company id / realmId
- *   custscript_walqbo_sync_refresh_seed      - QBO refresh token (Password field type), one-time bootstrap seed
  *   custscript_walqbo_sync_qbo_incomeacct_id - QBO Account internal id for IncomeAccountRef on auto-created items
  *   custscript_walqbo_sync_qbo_expacct_id    - QBO Account internal id for ExpenseAccountRef on auto-created items
  *   custscript_walqbo_sync_qbo_ap_id         - QBO Account internal id for every Purchase Order's APAccountRef
@@ -69,7 +68,6 @@ define(
             QBO_CLIENT_ID: 'custscript_walqbo_sync_client_id_qbo',
             QBO_CLIENT_SECRET: 'custscript_walqbo_sync_secret_qbo',
             QBO_COMPANY_ID: 'custscript_walqbo_sync_qbo_company_id',
-            QBO_REFRESH_TOKEN_SEED: 'custscript_walqbo_sync_refresh_seed',
             QBO_INCOME_ACCOUNT_ID: 'custscript_walqbo_sync_qbo_incomeacct_id',
             QBO_EXPENSE_ACCOUNT_ID: 'custscript_walqbo_sync_qbo_expacct_id',
             QBO_AP_ACCOUNT_ID: 'custscript_walqbo_sync_qbo_ap_id'
@@ -400,7 +398,6 @@ define(
                 qboClientId: script.getParameter({ name: PARAMS.QBO_CLIENT_ID }),
                 qboClientSecret: script.getParameter({ name: PARAMS.QBO_CLIENT_SECRET }),
                 qboCompanyId: script.getParameter({ name: PARAMS.QBO_COMPANY_ID }),
-                qboRefreshTokenSeed: script.getParameter({ name: PARAMS.QBO_REFRESH_TOKEN_SEED }),
                 qboEnvironment: (script.getParameter({ name: PARAMS.ENVIRONMENT }) || 'SANDBOX').toUpperCase(),
                 qboIncomeAccountId: script.getParameter({ name: PARAMS.QBO_INCOME_ACCOUNT_ID }),
                 qboExpenseAccountId: script.getParameter({ name: PARAMS.QBO_EXPENSE_ACCOUNT_ID }),
@@ -414,9 +411,9 @@ define(
             const cachedAccessToken = qboCache.get({ key: QBO_CACHE_KEYS.ACCESS_TOKEN });
             if (cachedAccessToken) return cachedAccessToken;
 
-            const refreshToken = qboCache.get({ key: QBO_CACHE_KEYS.REFRESH_TOKEN }) || ctx.qboRefreshTokenSeed;
+            const refreshToken = qboCache.get({ key: QBO_CACHE_KEYS.REFRESH_TOKEN });
             if (!refreshToken) {
-                throw new Error('No cached QBO access/refresh token and no custscript_walqbo_sync_refresh_seed set -- someone needs to re-authorize via wm_sl_qbo_auth.js or a Postman OAuth flow.');
+                throw new Error('No cached QBO refresh token -- someone needs to re-authorize via wm_sl_qbo_auth.js or a Postman OAuth flow.');
             }
 
             const basicAuth = encode.convert({

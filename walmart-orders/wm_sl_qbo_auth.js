@@ -4,13 +4,13 @@
  *
  * QBO re-authorization helper for customscript_wal_order_import_mr (wm_mr_order_import.js).
  *
- * customscript_wal_order_import_mr (wm_mr_order_import.js) getQboAccessToken() 
- * reads QBO tokens from N/cache (name 'walQboCache', scope PROTECTED), falling back to the seeded
- * custscript_wal_qbo_refresh_seed script parameter only when the cache is
- * empty. NetSuite's N/cache is documented as best-effort -- values can be
- * evicted before their TTL -- which is what actually happened once already,
- * leaving that script stuck on a dead seed token with no way to recover on
- * its own.
+ * customscript_wal_order_import_mr (wm_mr_order_import.js) getQboAccessToken()
+ * reads QBO tokens from N/cache (name 'walQboCache', scope PROTECTED) and
+ * writes back the newly-rotated refresh token on every use, so the cache is
+ * self-sustaining after the first authorization here. NetSuite's N/cache is
+ * documented as best-effort -- values can be evicted before their TTL --
+ * leaving that script with no cached token and no way to recover on its own. 
+ * If the cache is ever fully evicted, re-run the authorization flow here.
  *
  * Two ways to (re)authorize here:
  *   1. One-click redirect: the "Connect to QBO" link sends the browser to

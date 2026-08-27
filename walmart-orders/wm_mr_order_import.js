@@ -97,7 +97,6 @@
  *   custscript_wal_qbo_client_id            - QBO app Client ID (the dedicated Walmart-import app, NOT the existing Elite Wheel one)
  *   custscript_wal_qbo_client_secret        - QBO app Client Secret (Password field type)
  *   custscript_wal_qbo_company_id           - QBO company id / realmId
- *   custscript_wal_qbo_refresh_seed         - QBO refresh token (Password field type) -- one-time bootstrap seed only, see above
  *   custscript_wal_qbo_env                  - "PRODUCTION" or "SANDBOX" (defaults to SANDBOX)
  *   custscript_wal_qbo_income_acct_id       - QBO Account internal id used as IncomeAccountRef when
  *                                              createQboInvoice() has to auto-create a missing item
@@ -146,7 +145,6 @@ define(
             QBO_CLIENT_ID: 'custscript_wal_qbo_client_id',
             QBO_CLIENT_SECRET: 'custscript_wal_qbo_client_secret',
             QBO_COMPANY_ID: 'custscript_wal_qbo_company_id',
-            QBO_REFRESH_TOKEN_SEED: 'custscript_wal_qbo_refresh_seed',
             QBO_ENVIRONMENT: 'custscript_wal_qbo_env',
             QBO_INCOME_ACCOUNT_ID: 'custscript_wal_qbo_income_acct_id',
             QBO_EXPENSE_ACCOUNT_ID: 'custscript_wal_qbo_expense_acct_id',
@@ -310,7 +308,6 @@ define(
                 qboClientId: script.getParameter({ name: PARAMS.QBO_CLIENT_ID }),
                 qboClientSecret: script.getParameter({ name: PARAMS.QBO_CLIENT_SECRET }),
                 qboCompanyId: script.getParameter({ name: PARAMS.QBO_COMPANY_ID }),
-                qboRefreshTokenSeed: script.getParameter({ name: PARAMS.QBO_REFRESH_TOKEN_SEED }),
                 qboEnvironment: (script.getParameter({ name: PARAMS.QBO_ENVIRONMENT }) || 'SANDBOX').toUpperCase(),
                 qboIncomeAccountId: script.getParameter({ name: PARAMS.QBO_INCOME_ACCOUNT_ID }),
                 qboExpenseAccountId: script.getParameter({ name: PARAMS.QBO_EXPENSE_ACCOUNT_ID }),
@@ -320,10 +317,9 @@ define(
 
         /**
          * Reads the cached QBO access token (shared with wm_sl_qbo_auth.js),
-         * refreshing from the cached refresh token -- or, failing that, the
-         * one-time seeded custscript_wal_qbo_refresh_seed param -- if needed.
-         * Throws if nothing usable is available; this can never redirect a
-         * browser to re-authorize.
+         * refreshing from the cached refresh token if needed. Throws if
+         * nothing usable is available; this can never redirect a browser to
+         * re-authorize.
          */
         function getQboAccessToken(ctx) {
             const qboCache = cache.getCache({ name: QBO_CACHE_NAME, scope: cache.Scope.PROTECTED });
@@ -334,18 +330,12 @@ define(
                 return cachedAccessToken;
             }
 
-            // Cache miss on the access token -- log which refresh token source this
-            // falls back to. NetSuite's N/cache is documented as best-effort (values
-            // can be evicted before their TTL), so if this ever shows "seed param"
-            // right after a recent successful refresh, that's the smoking gun that
-            // the cache dropped an otherwise-still-valid rotated refresh token.
-            const cachedRefreshToken = qboCache.get({ key: QBO_CACHE_KEYS.REFRESH_TOKEN });
-            const refreshToken = cachedRefreshToken || ctx.qboRefreshTokenSeed;
+            const refreshToken = qboCache.get({ key: QBO_CACHE_KEYS.REFRESH_TOKEN });
             log.audit('QBO access token cache miss, refreshing', {
-                refreshTokenSource: cachedRefreshToken ? 'cache' : (ctx.qboRefreshTokenSeed ? 'seed param' : 'none available')
+                refreshTokenSource: refreshToken ? 'cache' : 'none available'
             });
             if (!refreshToken) {
-                throw new Error('No cached QBO access/refresh token and no custscript_wal_qbo_refresh_seed set -- someone needs to re-authorize via wm_sl_qbo_auth.js.');
+                throw new Error('No cached QBO refresh token -- someone needs to re-authorize via wm_sl_qbo_auth.js.');
             }
 
             const basicAuth = encode.convert({
