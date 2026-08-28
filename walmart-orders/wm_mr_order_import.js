@@ -1048,7 +1048,8 @@ define(
             salesOrder.setValue({ fieldId: 'entity', value: TIREMATIC_CUSTOMER_ID });   // Customer
             salesOrder.setValue({ fieldId: 'otherrefnum', value: String(purchaseOrderId) }); // PO#
             salesOrder.setValue({ fieldId: 'memo', value: `Walmart order ${purchaseOrderId}` });
-            salesOrder.setValue({ fieldId: 'location', value: TAMPA_LOCATION_ID });
+            salesOrder.setValue({ fieldId: 'location', value: TAMPA_LOCATION_ID });     // TODO: location should be set based on ship node.
+            salesOrder.setValue({ fieldId: 'custbody_walmart_order', value: true });      // Checkbox identifying this as a Walmart order.
             salesOrder.setValue({ fieldId: DELIVERY_TYPE_FIELD, value: DELIVERY_TYPE });
             salesOrder.setValue({ fieldId: SO_STATUS_FIELD, value: SO_STATUS });
 

@@ -37,7 +37,7 @@ define(['N/task', 'N/log', 'N/email'], (task, log, email) => {
     // Set on the dispatched task's params whenever a route's sendDeliveredEmailAlert
     // fires here, so wm_mr_return_import.js's reduce() knows not to send a
     // duplicate -- must match PARAMS.ALERT_ALREADY_SENT there exactly.
-    const ALERT_ALREADY_SENT_PARAM = 'custscript_wal_return_import_alert_sent';
+    const ALERT_ALREADY_SENT_PARAM = 'custscript_wal_retimp_sent_deliver_alert';
 
     const RETURN_ALERT_AUTHOR = 126970; // TODO: same placeholder as wm_mr_return_import.js -- set to a real NetSuite employee internal id
     const RETURN_ALERT_RECIPIENTS = [
