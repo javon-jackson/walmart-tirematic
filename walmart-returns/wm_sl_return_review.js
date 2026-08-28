@@ -108,7 +108,9 @@ define(
                 LAST_SYNCED: 'custrecord_wal_return_last_sync',
                 DELIVERY_DATE: 'custrecord_wal_return_delivery_date',
                 REVIEW_DATE: 'custrecord_wal_return_review_date',
-                REFUND_ISSUED_DATE: 'custrecord_wal_return_refund_issued_date'
+                REFUND_ISSUED_DATE: 'custrecord_wal_return_refund_issued_date',
+                QBO_SYNCED: 'custrecord_wal_return_qbo_synced',
+                ERROR: 'custrecord_wal_return_error'
             }
         };
 
@@ -434,6 +436,9 @@ define(
          * have it or need it themselves, so it's passed in rather than re-queried here.
          */
         function buildReturnDetailHtml(returnRecord, lines) {
+            const reviewStatus = returnRecord.getValue({ fieldId: RETURN_RECORD.FIELDS.REVIEW_STATUS });
+            const isRefundResolved = reviewStatus === REVIEW_STATUS.REFUND_ISSUED || reviewStatus === REVIEW_STATUS.REFUNDED_WALMART_INITIATED;
+
             const rows = [
                 ['Return Order ID', returnRecord.getValue({ fieldId: RETURN_RECORD.FIELDS.RETURN_ORDER_ID })],
                 ['PO ID', returnRecord.getValue({ fieldId: RETURN_RECORD.FIELDS.PO_ID })],
@@ -441,11 +446,16 @@ define(
                 ['Walmart Status', returnRecord.getValue({ fieldId: RETURN_RECORD.FIELDS.RETURN_STATUS })],
                 ['Tracking Number', returnRecord.getValue({ fieldId: RETURN_RECORD.FIELDS.TRACKING_NUMBER })],
                 ['Label URL', returnRecord.getValue({ fieldId: RETURN_RECORD.FIELDS.LABEL_URL })],
-                ['Review Status', returnRecord.getValue({ fieldId: RETURN_RECORD.FIELDS.REVIEW_STATUS })],
+                ['Review Status', reviewStatus],
                 ['Reviewed On', formatLoadedDate(returnRecord.getValue({ fieldId: RETURN_RECORD.FIELDS.REVIEW_DATE }))],
                 ['Refund Issued On', formatLoadedDate(returnRecord.getValue({ fieldId: RETURN_RECORD.FIELDS.REFUND_ISSUED_DATE }))],
-                ['Last Synced', formatLoadedDate(returnRecord.getValue({ fieldId: RETURN_RECORD.FIELDS.LAST_SYNCED }))]
-            ].filter(([, value]) => value);
+                // Only meaningful once a refund has actually resolved -- a sync
+                // attempt only ever happens from that point on (see
+                // wm_mr_return_import.js's reduce()).
+                isRefundResolved && ['QBO Synced', returnRecord.getValue({ fieldId: RETURN_RECORD.FIELDS.QBO_SYNCED }) ? 'Yes' : 'No'],
+                ['Last Synced', formatLoadedDate(returnRecord.getValue({ fieldId: RETURN_RECORD.FIELDS.LAST_SYNCED }))],
+                ['Error', returnRecord.getValue({ fieldId: RETURN_RECORD.FIELDS.ERROR })]
+            ].filter(Boolean).filter(([, value]) => value);
 
             let html = '<table style="border-collapse:collapse;margin-bottom:16px;">'
                 + rows.map(([label, value]) => `<tr><td style="padding:3px 12px 3px 0;color:#666;font-size:13px;">${escapeHtml(label)}</td>`
