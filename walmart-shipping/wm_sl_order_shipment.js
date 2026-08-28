@@ -2,6 +2,9 @@
  * @NApiVersion 2.1
  * @NScriptType Suitelet
  * 
+ * TESTING ONLY: Fulfillment is handled differently than I thought. New flow
+ * uses wm_ue_item_fulfillment_queue_writer.js in conjuction with wm_mr_item_fulfillment.js.
+ * 
  * Ops tool for shipping a Walmart order: enables buying shipping labels through 
  * Walmart at their provided rates or attaching our own tracking number to a box.
  * Then notifies Walmart that the order has shipped and updates the NetSuite Sales Order 
@@ -9,7 +12,7 @@
  *
  * Box model -- ONE BOX PER UNIT ORDERED
  *
- * Two-step flow, both via this same Suitelet:
+ * Three-step flow, all via this same Suitelet:
  *   STEP 1 (GET_RATES): user enters a Walmart purchaseOrderId. This script
  *     looks up the matching customrecord_wal_order_import_lock row (the same
  *     authoritative "is this really a Walmart order" check wm_ue_order_shipped.js
@@ -20,9 +23,17 @@
  *     can reasonably get different carriers/services). Renders a form with
  *     one rate-picker per box, PLUS an optional "or your own carrier/tracking"
  *     pair of fields next to it (see below).
- *   STEP 2 (BUY_LABEL): user picks a rate for every box (or fills in their own
- *     carrier + tracking for any box they'd rather ship on a label printed
- *     outside this tool) and submits. PER BOX, independently: if that box's
+ *   STEP 2 (CONFIRM_SHIPMENT): user picks a rate for every box (or fills in
+ *     their own carrier + tracking for any box they'd rather ship on a label
+ *     printed outside this tool) and submits. Nothing is bought or sent to
+ *     Walmart yet -- parseBoxDecisions() re-validates the same per-box rules
+ *     STEP 3 enforces (a box can't have both a rate AND manual tracking,
+ *     etc.), then this renders a plain-language, per-box summary of exactly
+ *     what STEP 3 is about to do (buy a real Walmart label / submit manual
+ *     tracking / leave for later), with every raw selection carried forward
+ *     as hidden fields so STEP 3 parses the exact same submitted values
+ *     rather than trusting anything derived on this screen.
+ *   STEP 3 (BUY_LABEL): user confirms on that summary screen. PER BOX, independently: if that box's
  *     manual tracking field is filled in (and a carrier chosen), no Walmart
  *     label is bought for it at all -- its box.label object is built directly
  *     from what was typed in; if instead a real Walmart rate was chosen, that's
@@ -74,6 +85,13 @@
  *          boxes -- customrecord_wal_shipment_notification (one row per box)
  *          is the actual source of truth per box, including which ones were
  *          bought through Walmart vs. shipped on their own label.
+ *       6. Create a real NetSuite Item Fulfillment covering just this round's
+ *          boxes (createWalmartItemFulfillment()) -- lines not shipped this
+ *          round are excluded via itemreceive rather than fulfilled early, so
+ *          a deferred box still shows as outstanding on the Sales Order. Not
+ *          propagated on failure -- Walmart's already been notified and the
+ *          Sales Order fields above already updated regardless, so this is
+ *          logged, not treated as an overall failure.
  *
  * Partial/deferred shipment -- a box can ALSO be left for a later visit rather
  * than decided right now: leaving BOTH its rate dropdown at the default
@@ -182,6 +200,19 @@ define(
         const CARRIER_FIELD = 'custbody_shipping_carrier';
         const TRACKING_NUMBER_FIELD = null; // TODO
 
+        // TODO: confirm fields -- Item Fulfillment. Best-guess standard NetSuite
+        // field ids, unverified against this account -- checked a real completed
+        // Item Fulfillment in this account and its Package sublist tracking
+        // number was blank even though the order genuinely shipped, so this
+        // isn't confirmed the way CARRIER_FIELD's real values were. First real
+        // test run's log/error output settles these, same as everything else in
+        // this TODO block.
+        const ITEM_RECEIVE_FIELD = 'itemreceive'; // item sublist checkbox -- false excludes a line from this fulfillment
+        const PACKAGE_TRACKING_FIELD = 'packagetrackingnumber'; // package sublist
+        const PACKAGE_WEIGHT_FIELD = 'packageweight'; // package sublist -- confirmed required: NetSuite rejects a package line with no weight once shipstatus is Shipped
+        const SHIP_STATUS_FIELD = 'shipstatus';
+        const SHIP_STATUS_SHIPPED_VALUE = 'C'; // NetSuite internal value for Item Fulfillment status "Shipped"
+
         const CARRIER_INTERNAL_ID_MAP = {
             'FEDEX': '1', // NetSuite list value "Fedex"
             'UPS': '2',
@@ -252,6 +283,7 @@ define(
 
         const ACTION = {
             GET_RATES: 'getRates',
+            CONFIRM_SHIPMENT: 'confirmShipment',
             BUY_LABEL: 'buyLabel'
         };
 
@@ -267,6 +299,8 @@ define(
 
                 if (action === ACTION.GET_RATES) {
                     handleGetRates(context);
+                } else if (action === ACTION.CONFIRM_SHIPMENT) {
+                    handleConfirmShipment(context);
                 } else if (action === ACTION.BUY_LABEL) {
                     handleBuyLabel(context);
                 } else {
@@ -392,9 +426,9 @@ define(
 
             const actionField = form.addField({ id: 'custpage_action', type: serverWidget.FieldType.TEXT, label: 'Action', container: group });
             actionField.updateDisplayType({ displayType: serverWidget.FieldDisplayType.HIDDEN });
-            actionField.defaultValue = ACTION.BUY_LABEL;
+            actionField.defaultValue = ACTION.CONFIRM_SHIPMENT;
 
-            // Step 2 regenerates the same box list fresh and matches entries back up by
+            // Step 3 regenerates the same box list fresh and matches entries back up by
             // array index.
             const countField = form.addField({ id: 'custpage_box_count', type: serverWidget.FieldType.TEXT, label: 'Box Count', container: group });
             countField.updateDisplayType({ displayType: serverWidget.FieldDisplayType.HIDDEN });
@@ -414,6 +448,16 @@ define(
                 });
                 headingField.defaultValue = `<h3 style="margin:16px 0 4px;border-top:1px solid #ddd;padding-top:12px;">`
                     + `BOX ${index + 1} of ${boxEstimates.length} (${box.sku})</h3>`;
+
+                // Carried through to the confirmation screen purely for a readable label
+                // there -- not otherwise used by this form.
+                const skuField = form.addField({ id: 'custpage_box_sku_' + index, type: serverWidget.FieldType.TEXT, label: ' ', container: group });
+                skuField.updateDisplayType({ displayType: serverWidget.FieldDisplayType.HIDDEN });
+                skuField.defaultValue = box.sku || '';
+
+                const productField = form.addField({ id: 'custpage_box_product_' + index, type: serverWidget.FieldType.TEXT, label: ' ', container: group });
+                productField.updateDisplayType({ displayType: serverWidget.FieldDisplayType.HIDDEN });
+                productField.defaultValue = box.productName || '';
 
                 const rateField = form.addField({
                     id: 'custpage_rate_' + index, type: serverWidget.FieldType.SELECT,
@@ -448,7 +492,7 @@ define(
                 });
             });
 
-            form.addSubmitButton({ label: 'Buy Labels & Confirm Shipment with Walmart' });
+            form.addSubmitButton({ label: 'Review Selections' });
 
             const startOverField = form.addField({ id: 'custpage_start_over', type: serverWidget.FieldType.INLINEHTML, label: ' ' });
             startOverField.defaultValue = '<div style="padding:10px 0;">'
@@ -459,7 +503,166 @@ define(
         }
 
         /**
-         * STEP 2: acknowledge -> per box, either buy a Walmart label OR use manually
+         * STEP 2's screen: read-only PO/Sales Order ids, a warning that confirming buys
+         * real Walmart labels (real charges) and can't be undone from this tool, then one
+         * summary line per box. Every raw rate/manual-carrier/manual-tracking value is
+         * re-emitted as a hidden field (untouched) so STEP 3 parses the exact same
+         * submitted values as it would have received directly from the rate-selection form.
+         */
+        function buildConfirmationForm(params) {
+            const { purchaseOrderId, salesOrderId, boxCount, boxDecisions, request } = params;
+            const form = serverWidget.createForm({ title: 'Confirm Shipment' });
+            const group = addSingleColumnGroup(form, 'custpage_confirm_group');
+
+            const poField = form.addField({ id: 'custpage_po_id', type: serverWidget.FieldType.TEXT, label: 'Walmart Purchase Order ID', container: group });
+            poField.updateDisplayType({ displayType: serverWidget.FieldDisplayType.INLINE });
+            poField.defaultValue = purchaseOrderId;
+
+            const soField = form.addField({ id: 'custpage_sales_order_id', type: serverWidget.FieldType.TEXT, label: 'Sales Order Internal ID', container: group });
+            soField.updateDisplayType({ displayType: serverWidget.FieldDisplayType.INLINE });
+            soField.defaultValue = String(salesOrderId);
+
+            const countField = form.addField({ id: 'custpage_box_count', type: serverWidget.FieldType.TEXT, label: 'Box Count', container: group });
+            countField.updateDisplayType({ displayType: serverWidget.FieldDisplayType.HIDDEN });
+            countField.defaultValue = String(boxCount);
+
+            const actionField = form.addField({ id: 'custpage_action', type: serverWidget.FieldType.TEXT, label: 'Action', container: group });
+            actionField.updateDisplayType({ displayType: serverWidget.FieldDisplayType.HIDDEN });
+            actionField.defaultValue = ACTION.BUY_LABEL;
+
+            const boughtCount = boxDecisions.filter((d) => !d.skip && !d.useManual).length;
+            const manualCount = boxDecisions.filter((d) => !d.skip && d.useManual).length;
+            const skippedCount = boxDecisions.filter((d) => d.skip).length;
+
+            const warningField = form.addField({ id: 'custpage_warning', type: serverWidget.FieldType.INLINEHTML, label: ' ', container: group });
+            warningField.defaultValue = '<p><strong>Review before confirming.</strong> Clicking "Confirm &amp; Ship" will'
+                + (boughtCount ? ` buy ${boughtCount} real Walmart shipping label(s) (Walmart will charge for these),` : '')
+                + ` submit ${manualCount} manually-entered tracking number(s), and notify Walmart that ${boughtCount + manualCount} box(es) have shipped.`
+                + ' This cannot be undone from this tool.'
+                + (skippedCount ? ` ${skippedCount} box(es) will be left outstanding for a later visit.` : '')
+                + '</p>';
+
+            for (let i = 0; i < boxCount; i++) {
+                const decision = boxDecisions[i];
+                const sku = request.parameters['custpage_box_sku_' + i] || '';
+                const productName = request.parameters['custpage_box_product_' + i] || '';
+                const label = productName ? `${productName} (${sku})` : (sku || `Box ${i + 1}`);
+
+                let detail;
+                if (decision.skip) {
+                    detail = 'Left for later -- no label, no tracking submitted this round.';
+                } else if (decision.useManual) {
+                    const carrierDisplay = MANUAL_CARRIER_DISPLAY_NAMES[decision.manualCarrierKey] || decision.manualCarrierKey;
+                    detail = `Your own tracking: ${carrierDisplay} ${decision.manualTrackingNo} (no Walmart label purchased).`;
+                } else {
+                    detail = `Buy Walmart label: ${decision.carrierName} - ${decision.carrierServiceType}`
+                        + (decision.rateAmount ? ` - $${decision.rateAmount}` : '');
+                }
+
+                const rowField = form.addField({ id: 'custpage_summary_' + i, type: serverWidget.FieldType.INLINEHTML, label: ' ', container: group });
+                rowField.defaultValue = `<p><strong>Box ${i + 1} of ${boxCount}</strong> -- ${label}<br/>${detail}</p>`;
+
+                const rateField = form.addField({ id: 'custpage_rate_' + i, type: serverWidget.FieldType.TEXT, label: ' ', container: group });
+                rateField.updateDisplayType({ displayType: serverWidget.FieldDisplayType.HIDDEN });
+                rateField.defaultValue = request.parameters['custpage_rate_' + i] || '';
+
+                const manualCarrierField = form.addField({ id: 'custpage_manual_carrier_' + i, type: serverWidget.FieldType.TEXT, label: ' ', container: group });
+                manualCarrierField.updateDisplayType({ displayType: serverWidget.FieldDisplayType.HIDDEN });
+                manualCarrierField.defaultValue = request.parameters['custpage_manual_carrier_' + i] || '';
+
+                const manualTrackingField = form.addField({ id: 'custpage_manual_tracking_' + i, type: serverWidget.FieldType.TEXT, label: ' ', container: group });
+                manualTrackingField.updateDisplayType({ displayType: serverWidget.FieldDisplayType.HIDDEN });
+                manualTrackingField.defaultValue = request.parameters['custpage_manual_tracking_' + i] || '';
+            }
+
+            form.addSubmitButton({ label: 'Confirm & Ship' });
+
+            const startOverField = form.addField({ id: 'custpage_start_over', type: serverWidget.FieldType.INLINEHTML, label: ' ' });
+            startOverField.defaultValue = '<div style="padding:10px 0;">'
+                + `<a href="${buildSuiteletUrl()}" style="${SECONDARY_LINK_STYLE}">Start over</a>`
+                + '</div>';
+
+            return form;
+        }
+
+        /**
+         * Parses/validates the per-box rate-or-manual-tracking selections submitted from
+         * either the rate-selection form or the confirmation screen's carried-forward
+         * hidden fields (same field names either way). Each box independently resolves to
+         * exactly one of: buy via Walmart (a real rate was chosen), manual tracking (typed
+         * in), or skip (both left blank -- decide later). A box can't be both -- picking a
+         * real Walmart rate AND filling in manual tracking for the same box is rejected
+         * outright rather than silently preferring one, so a mistaken double-entry never
+         * buys/skips a label the user didn't actually mean to. Returns { errorMessage }
+         * instead of writing a response page directly so STEP 2 (confirmation) and STEP 3
+         * (buy/ship) can each render the error in their own way.
+         */
+        function parseBoxDecisions(request, boxCount) {
+            const decisions = [];
+            for (let i = 0; i < boxCount; i++) {
+                const rawRate = request.parameters['custpage_rate_' + i] || '';
+                const manualCarrierKey = request.parameters['custpage_manual_carrier_' + i] || '';
+                const manualTrackingNo = String(request.parameters['custpage_manual_tracking_' + i] || '').trim();
+                const hasRate = !!rawRate;
+                const hasManual = !!manualTrackingNo;
+
+                if (hasRate && hasManual) {
+                    return { errorMessage: `Box ${i + 1}: choose EITHER a Walmart shipping rate OR your own tracking number, not both -- please start again.` };
+                }
+
+                if (hasManual && !manualCarrierKey) {
+                    return { errorMessage: `Box ${i + 1}: a carrier must be selected when providing your own tracking number -- please start again.` };
+                }
+
+                if (!hasManual && !hasRate) {
+                    decisions.push({ skip: true });
+                    continue;
+                }
+
+                if (hasManual) {
+                    decisions.push({ skip: false, useManual: true, manualCarrierKey, manualTrackingNo });
+                } else {
+                    const [carrierName, carrierServiceType, rateAmount] = rawRate.split('::');
+                    decisions.push({ skip: false, useManual: false, carrierName, carrierServiceType, rateAmount: rateAmount || null });
+                }
+            }
+
+            if (decisions.every((d) => d.skip)) {
+                return { errorMessage: 'No boxes were selected to ship -- choose a rate or enter your own tracking for at least one box, or come back later.' };
+            }
+
+            return { decisions };
+        }
+
+        /**
+         * STEP 2: re-validates the submitted selections (parseBoxDecisions()) and shows a
+         * plain-language, per-box preview of what STEP 3 is about to do -- no Walmart calls
+         * happen here. Every raw selection is carried forward as hidden fields so STEP 3
+         * parses the exact same submitted values rather than trusting anything derived on
+         * this screen.
+         */
+        function handleConfirmShipment(context) {
+            const request = context.request;
+            const purchaseOrderId = request.parameters.custpage_po_id;
+            const salesOrderId = request.parameters.custpage_sales_order_id;
+            const boxCount = Number(request.parameters.custpage_box_count) || 0;
+
+            if (!purchaseOrderId || !salesOrderId || !boxCount) {
+                context.response.writePage(buildResultPage({ success: false, message: 'Missing purchaseOrderId, Sales Order id, or box selections -- please start again.' }));
+                return;
+            }
+
+            const { decisions: boxDecisions, errorMessage } = parseBoxDecisions(request, boxCount);
+            if (errorMessage) {
+                context.response.writePage(buildResultPage({ success: false, message: errorMessage }));
+                return;
+            }
+
+            context.response.writePage(buildConfirmationForm({ purchaseOrderId, salesOrderId, boxCount, boxDecisions, request }));
+        }
+
+        /**
+         * STEP 3: acknowledge -> per box, either buy a Walmart label OR use manually
          * entered tracking OR skip (decide later) -> confirm shipment with Walmart (one
          * call covering whatever boxes were actually acted on this round) -> update
          * Sales Order -> log. See header comment for the full per-box mixing/deferral
@@ -476,46 +679,9 @@ define(
                 return;
             }
 
-            // Parsed once up front, before any Walmart calls -- each box independently
-            // resolves to exactly one of: buy via Walmart (a real rate was chosen),
-            // manual tracking (typed in), or skip (both left blank -- decide later). 
-            // A box can't be both -- picking a real Walmart rate AND
-            // filling in manual tracking for the same box is rejected outright rather than
-            // silently preferring one, so a mistaken double-entry never buys/skips a label
-            // the user didn't actually mean to.
-            const boxDecisions = [];
-            for (let i = 0; i < boxCount; i++) {
-                const rawRate = request.parameters['custpage_rate_' + i] || '';
-                const manualCarrierKey = request.parameters['custpage_manual_carrier_' + i] || '';
-                const manualTrackingNo = String(request.parameters['custpage_manual_tracking_' + i] || '').trim();
-                const hasRate = !!rawRate;
-                const hasManual = !!manualTrackingNo;
-
-                if (hasRate && hasManual) {
-                    context.response.writePage(buildResultPage({ success: false, message: `Box ${i + 1}: choose EITHER a Walmart shipping rate OR your own tracking number, not both -- please start again.` }));
-                    return;
-                }
-
-                if (hasManual && !manualCarrierKey) {
-                    context.response.writePage(buildResultPage({ success: false, message: `Box ${i + 1}: a carrier must be selected when providing your own tracking number -- please start again.` }));
-                    return;
-                }
-
-                if (!hasManual && !hasRate) {
-                    boxDecisions.push({ skip: true });
-                    continue;
-                }
-
-                if (hasManual) {
-                    boxDecisions.push({ skip: false, useManual: true, manualCarrierKey, manualTrackingNo });
-                } else {
-                    const [carrierName, carrierServiceType, rateAmount] = rawRate.split('::');
-                    boxDecisions.push({ skip: false, useManual: false, carrierName, carrierServiceType, rateAmount: rateAmount || null });
-                }
-            }
-
-            if (boxDecisions.every((d) => d.skip)) {
-                context.response.writePage(buildResultPage({ success: false, message: 'No boxes were selected to ship -- choose a rate or enter your own tracking for at least one box, or come back later.' }));
+            const { decisions: boxDecisions, errorMessage } = parseBoxDecisions(request, boxCount);
+            if (errorMessage) {
+                context.response.writePage(buildResultPage({ success: false, message: errorMessage }));
                 return;
             }
 
@@ -688,7 +854,147 @@ define(
                 options: { enableSourcing: false, ignoreMandatoryFields: true }
             });
 
+            // Not propagated -- Walmart's already been told the order shipped and the
+            // Sales Order fields above already updated by this point regardless, so a
+            // NetSuite-side Item Fulfillment failure shouldn't fail the whole operation,
+            // just needs to surface clearly for manual follow-up.
+            try {
+                createWalmartItemFulfillment({ salesOrderId, purchaseOrderId, labels });
+            } catch (fulfillmentError) {
+                log.error('Failed to create Item Fulfillment (Walmart already notified, Sales Order fields already updated)', {
+                    purchaseOrderId, salesOrderId, errorMessage: fulfillmentError && fulfillmentError.message
+                });
+            }
+
             return { trackingNumbers, carrierNames };
+        }
+
+        /** search.lookupFields wrapper -- an Item Fulfillment's item sublist only carries the NetSuite item internal id, not the SKU, so this maps back to what labels/boxes are keyed by. */
+        function findItemSkuByInternalId(itemInternalId) {
+            if (!itemInternalId) return null;
+            const result = search.lookupFields({ type: search.Type.ITEM, id: itemInternalId, columns: ['itemid'] });
+            return result.itemid || null;
+        }
+
+        /**
+         * Finds bin(s) at the fulfillment line's own location with enough
+         * on-hand quantity to cover qty. No FIFO/rotation rule -- any bin with
+         * enough is fine, per explicit instruction; only splits across
+         * multiple bins if no single one has enough alone. Throws if total
+         * available across all bins at that location falls short.
+         *
+         * Uses an Item search with the "Bin On Hand" join (binnumber/available/
+         * location) rather than a separate "Bin Item Balance" search type --
+         * confirmed via a real saved-search preview that this join is where
+         * per-bin on-hand/available data actually lives on this account; the
+         * earlier binitembalance-type attempt threw an invalid-column error.
+         */
+        function findBinsForFulfillment(itemInternalId, locationId, qty) {
+            const binSearch = search.create({
+                type: search.Type.ITEM,
+                filters: [
+                    ['internalid', 'anyof', itemInternalId],
+                    'AND',
+                    ['binonhand.location', 'anyof', locationId],
+                    'AND',
+                    ['binonhand.quantityavailable', 'greaterthan', 0]
+                ],
+                columns: [
+                    search.createColumn({ name: 'binnumber', join: 'binonhand' }),
+                    search.createColumn({ name: 'quantityavailable', join: 'binonhand', sort: search.Sort.DESC })
+                ]
+            });
+            const results = binSearch.run().getRange({ start: 0, end: 50 }) || [];
+
+            const assignments = [];
+            let remaining = qty;
+            for (const r of results) {
+                if (remaining <= 0) break;
+                const binId = r.getValue({ name: 'binnumber', join: 'binonhand' });
+                const available = Number(r.getValue({ name: 'quantityavailable', join: 'binonhand' })) || 0;
+                if (!binId || available <= 0) continue;
+                const take = Math.min(available, remaining);
+                assignments.push({ binId, quantity: take });
+                remaining -= take;
+            }
+
+            if (remaining > 0) {
+                throw new Error(`Not enough on-hand bin quantity at location ${locationId} for item ${itemInternalId} to cover ${qty} -- short by ${remaining}.`);
+            }
+            return assignments;
+        }
+
+        /**
+         * Creates a NetSuite Item Fulfillment covering just this round's boxes --
+         * not necessarily the whole order, since a box left for a later visit
+         * (see header comment on partial/deferred shipment) shouldn't be marked
+         * fulfilled yet. record.transform() pre-populates every remaining
+         * unfulfilled Sales Order line at its full remaining quantity; lines with
+         * no boxes in this round get itemreceive unchecked to exclude them, lines
+         * that do get their quantity reduced to just what shipped this round.
+         * Bin-tracked items also require an Inventory Detail subrecord per line
+         * (see findBinsForFulfillment()) -- confirmed required by a real
+         * "Please configure the inventory detail" error, not assumed upfront.
+         */
+        function createWalmartItemFulfillment(params) {
+            const { salesOrderId, purchaseOrderId, labels } = params;
+
+            const qtyBySku = {};
+            labels.forEach((l) => {
+                qtyBySku[l.box.sku] = (qtyBySku[l.box.sku] || 0) + 1;
+            });
+
+            const fulfillment = record.transform({
+                fromType: record.Type.SALES_ORDER,
+                fromId: salesOrderId,
+                toType: record.Type.ITEM_FULFILLMENT,
+                isDynamic: true
+            });
+
+            const lineCount = fulfillment.getLineCount({ sublistId: 'item' });
+            for (let i = 0; i < lineCount; i++) {
+                fulfillment.selectLine({ sublistId: 'item', line: i });
+                const itemInternalId = fulfillment.getCurrentSublistValue({ sublistId: 'item', fieldId: 'item' });
+                const sku = findItemSkuByInternalId(itemInternalId);
+                const qty = sku && qtyBySku[sku];
+                if (!qty) {
+                    fulfillment.setCurrentSublistValue({ sublistId: 'item', fieldId: ITEM_RECEIVE_FIELD, value: false });
+                } else {
+                    fulfillment.setCurrentSublistValue({ sublistId: 'item', fieldId: 'quantity', value: qty });
+                    const lineLocationId = fulfillment.getCurrentSublistValue({ sublistId: 'item', fieldId: 'location' });
+                    const binAssignments = findBinsForFulfillment(itemInternalId, lineLocationId, qty);
+                    const inventoryDetail = fulfillment.getCurrentSublistSubrecord({ sublistId: 'item', fieldId: 'inventorydetail' });
+                    binAssignments.forEach((assignment) => {
+                        inventoryDetail.selectNewLine({ sublistId: 'inventoryassignment' });
+                        inventoryDetail.setCurrentSublistValue({ sublistId: 'inventoryassignment', fieldId: 'binnumber', value: assignment.binId });
+                        inventoryDetail.setCurrentSublistValue({ sublistId: 'inventoryassignment', fieldId: 'quantity', value: assignment.quantity });
+                        inventoryDetail.commitLine({ sublistId: 'inventoryassignment' });
+                    });
+                }
+                fulfillment.commitLine({ sublistId: 'item' });
+            }
+
+            // Status set BEFORE the package lines, not after -- reordered from an
+            // earlier version where a real test showed package tracking numbers
+            // silently not persisting despite a confirmed-correct field id
+            // (packagetrackingnumber, verified via the rendered form's own
+            // input name attribute). Suspected cause: setting shipstatus to
+            // Shipped appears to trigger NetSuite to recalculate/regenerate the
+            // Package sublist, which would explain both the lost tracking data
+            // AND the unexplained weight values that showed up despite this
+            // script never setting weight itself.
+            fulfillment.setValue({ fieldId: SHIP_STATUS_FIELD, value: SHIP_STATUS_SHIPPED_VALUE });
+
+            labels.forEach((l) => {
+                fulfillment.selectNewLine({ sublistId: 'package' });
+                fulfillment.setCurrentSublistValue({ sublistId: 'package', fieldId: PACKAGE_TRACKING_FIELD, value: l.label.trackingNo });
+                fulfillment.setCurrentSublistValue({ sublistId: 'package', fieldId: PACKAGE_WEIGHT_FIELD, value: l.box.boxDimensions.boxWeight });
+                fulfillment.commitLine({ sublistId: 'package' });
+            });
+
+            const fulfillmentId = fulfillment.save({ enableSourcing: false, ignoreMandatoryFields: true });
+            log.audit('Item Fulfillment created', { purchaseOrderId, salesOrderId, fulfillmentId });
+            return fulfillmentId;
         }
 
         /**
@@ -790,7 +1096,6 @@ define(
             return internalId;
         }
 
-        /** Same authoritative "is this a Walmart order" check as wm_ue_order_shipped.js, keyed by PO id instead of Sales Order id since that's what the user enters here. */
         function findWalmartLockByPoId(purchaseOrderId) {
             const lockSearch = search.create({
                 type: LOCK_RECORD_TYPE,
