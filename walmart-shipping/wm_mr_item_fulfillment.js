@@ -3,6 +3,8 @@
  * @NScriptType MapReduceScript
  * 
  * Walmart Item Fulfillment Queue Processor
+ * TODO: currently only handles fulfillments with one item line.
+ * Need a way to map skus to their tracking numbers. Needs to make a Walmart API req for each package/tracking num.
  *
  */
 define(['N/record', 'N/search', 'N/runtime', 'N/https', 'N/encode', 'N/crypto/random'], 
@@ -31,8 +33,19 @@ define(['N/record', 'N/search', 'N/runtime', 'N/https', 'N/encode', 'N/crypto/ra
             SANDBOX: 'https://sandbox.walmartapis.com'
     };
 
-    // TODO: confirm field ids
     const TRACKING_NUM_FIELD = 'packagetrackingnumber';
+    // TODO: cannot view this fields potential values. Find them and map them to Walmarts expected carriers.
+    // Valid entries are: UPS, USPS, FedEx, Airborne, OnTrac, DHL Ecommerce - US, DHL, 
+    // LS (LaserShip), UDS (United Delivery Service), UPSMI (UPS Mail Innovations), 
+    // FDX, PILOT, ESTES, SAIA, FDS Express, Seko Worldwide, HIT Delivery, FEDEXSP (FedEx SmartPost), 
+    // RL Carriers, Metropolitan Warehouse & Delivery, China Post, YunExpress,Yellow Freight Sys, 
+    // AIT Worldwide Logistics, Chukou1, Sendle, Landmark Global, Sunyou, Yanwen, 4PX, GLS, OSM Worldwide, 
+    // FIRST MILE, AM Trucking, CEVA, India Post, SF Express, CNE, TForce Freight, AxleHire, LSO, Royal Mail, 
+    // ABF Freight System, WanB, Roadrunner Freight, Meyer Distribution, AAA Cooper, Canada Post, 
+    // Southeastern Freight Lines, Japan Post, Correos de Mexico, XPO Logistics, JD Logistics, YDH, JCEX, Flyt, 
+    // Deutsche Post, Better Trucks, Asendia, SFC, UBI, ePost Global, YF Logistics, RXO, Estes Express, Shypmax, 
+    // WIN.IT America, PITT OHIO, PostNord Sweden, Equick, Whistl, Tusou, Shiprocket, USPS First Class Mail, DTDC, 
+    // PTS.
     const SHIPPING_CARRIER_FIELD = 'custbody_pacejet_shipped_method';
 
     function getScriptParams() {
@@ -79,6 +92,7 @@ define(['N/record', 'N/search', 'N/runtime', 'N/https', 'N/encode', 'N/crypto/ra
             const correlationId = random.generateUUID();
             const accessToken = getWalmartAccessToken({ clientId: ctx.clientId, clientSecret: ctx.clientSecret, baseUrl, correlationId});
             const orderDetails = getOrderDetails({ accessToken, baseUrl, purchaseOrderId, correlationId, environment: env });
+            // TODO: Currently only handles one carrier per fulfillment record.
             const shippingCarrier = fulfillmentRecord.getValue({ fieldId: SHIPPING_CARRIER_FIELD });
             const shipDateTime = Date.now();
 
@@ -293,7 +307,6 @@ define(['N/record', 'N/search', 'N/runtime', 'N/https', 'N/encode', 'N/crypto/ra
 
     // TODO: currently only wired to handle one item line. Need a way to map each item to tracking number.
     // If only one item line theres only one sku, so each sku can use any of the tracking numbers.
-    // If multiple item lines are involved, 
     function getFulfillmentLine(fulfillmentRecord) {
         const lineCount = fulfillmentRecord.getLineCount({ sublistId: 'item' });
         if (lineCount !== 1) {
@@ -304,11 +317,12 @@ define(['N/record', 'N/search', 'N/runtime', 'N/https', 'N/encode', 'N/crypto/ra
         return { sku: itemSku };
     }
 
+    // Get tracking numbers for all packages
     function getFulfillmentPackages(fulfillmentRecord) {
         const packages = [];
         const packageCount = fulfillmentRecord.getLineCount({ sublistId: 'package' });
         for (let i = 0; i < packageCount; i++) {
-            const trackingNum = fulfillmentRecord.getSublistValue({ sublistId: 'package', line: i, fieldId: 'packagetrackingnumber' });
+            const trackingNum = fulfillmentRecord.getSublistValue({ sublistId: 'package', line: i, fieldId: TRACKING_NUM_FIELD });
             if (trackingNum) {
                 packages.push({ trackingNum });
             }

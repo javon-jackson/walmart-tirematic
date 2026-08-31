@@ -26,11 +26,21 @@ define(['N/record', 'N/log', 'N/search'], (record, log, search) => {
                 const fulfillmentRecordId = context.newRecord.id;
 
                 if (recordType === record.Type.ITEM_FULFILLMENT) {
-                    const status = context.newRecord.getValue({ fieldId: 'shipstatus' });
+                    // Load the full record here because XEDIT events only include modified fields on context.newRecord.
+                    const fulfillmentRecord = record.load({
+                        type: recordType,
+                        id: fulfillmentRecordId
+                    });
+                    // Ship status
+                    // A = 'Picked'
+                    // B = 'Packed'
+                    // C = 'Shipped'
+                    // TODO: are there cases where items may be shipped but not marked as such in the Item Fulfillment?
+                    const status = fulfillmentRecord.getValue({ fieldId: 'shipstatus' });
                     if (status !== 'C') {
                         return;
                     }
-                    const salesOrderId = context.newRecord.getValue({ fieldId: 'createdfrom'});
+                    const salesOrderId = fulfillmentRecord.getValue({ fieldId: 'createdfrom'});
                     const salesOrderFields = search.lookupFields({ 
                         type: record.Type.SALES_ORDER,
                         id: salesOrderId,

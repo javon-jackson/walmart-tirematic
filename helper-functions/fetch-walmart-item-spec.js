@@ -170,8 +170,6 @@ async function main() {
     }
 
     // TODO: Cannot get spec from sandbox! use prod access token and hit prod api.
-    // Dynamic sandbox requires this header or requests fall back to the
-    // static sandbox.
     const sandboxHeaders = envUpper === 'SANDBOX' ? { 'WM_SANDBOX': 'v2' } : undefined;
 
     // Sandbox docs reference Item Specification version 3 support; default

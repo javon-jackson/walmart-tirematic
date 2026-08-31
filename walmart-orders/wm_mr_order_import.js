@@ -789,10 +789,7 @@ define(
          * same Walmart postalAddress the Sales Order's shipaddress text field uses.
          *
          * TODO
-         * Known gaps, deliberately not handled yet (same reasoning as
-         * buildSalesOrderFromWalmartOrder's, kept in parity with the NetSuite SO
-         * it's invoicing against):
-         *   - No tax line/tax code handling -- every line is marked TaxCodeRef "NON".
+         *   - Every line is marked TaxCodeRef "NON".
          *   - Every auto-created item uses the same fixed income/expense account
          *     pair regardless of item category (fine while this only ever sells
          *     tires; would need Elite Wheel's asset-account-keyed map if that changes).
