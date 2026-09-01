@@ -348,11 +348,6 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
         const result = JSON.parse(context.value);
         const values = result.values;
 
-        // TEMP DEBUG -- logs the actual field ids/shape this saved search
-        // returns per row, to confirm COLUMNS.LOCATION matches. Remove once
-        // the correct field id is confirmed and the ship node lookups work.
-        // log.debug({ title: `Raw search result values (internal id ${result.id})`, details: JSON.stringify(values) });
-
         const sku = getColumnValue(values, COLUMNS.SKU);
         if (!sku) {
             log.error({ title: 'Skipping row with blank SKU', details: `internal id ${result.id}` });

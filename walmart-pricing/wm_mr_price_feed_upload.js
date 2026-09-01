@@ -24,18 +24,15 @@
  *
  *
  * Script parameters:
- *   custscript_wal_price_promo_feed_saved_search  - internal ID of a saved search
- *                                                    on Item with SKU + Base Price
- *                                                    columns (same shape
- *                                                    wm_mr_price_feed_upload.js uses --
- *                                                    can be the same saved search)
- *   custscript_wal_price_promo_feed_client_id     - Walmart Marketplace API Client ID
- *   custscript_wal_price_promo_feed_client_secret - Walmart Marketplace API Client Secret (Password field type)
- *   custscript_wal_price_promo_feed_env           - "PRODUCTION" or "SANDBOX"
- *   custscript_wal_price_promo_feed_bucket_size   - TARGET items per bucket (default 1000) --
- *                                                    NOT a bucket count; getNumBuckets() below
- *                                                    divides the saved search's total row count
- *                                                    by this to compute how many buckets to hash into
+ *   custscript_wal_price_feed_saved_search  - internal ID of a saved search
+ *                                              on Item with SKU + Base Price columns
+ *   custscript_wal_price_feed_client_id     - Walmart Marketplace API Client ID
+ *   custscript_wal_price_feed_client_secret - Walmart Marketplace API Client Secret (Password field type)
+ *   custscript_wal_price_feed_env           - "PRODUCTION" or "SANDBOX"
+ *   custscript_wal_price_feed_bucket_size   - TARGET items per bucket (default 1000) --
+ *                                              NOT a bucket count; getNumBuckets() below
+ *                                              divides the saved search's total row count
+ *                                              by this to compute how many buckets to hash into
  *
  * MPItemFeedHeader.version is hardcoded (see HEADER_VERSION below) to Walmart's published
  * example value "2.0.20240126-12_25_52-api" -- a doc sample.
@@ -49,7 +46,7 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
 
     const COLUMNS = {
         SKU: 'itemid',
-        PRICE: 'unitprice.pricing' // Price Level MPM -- same column label wm_mr_price_feed_upload.js uses
+        PRICE: 'unitprice.pricing' // Price Level MPM
     };
 
     const BUSINESS_UNIT = 'WALMART_US';
@@ -60,11 +57,11 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
     const WALMART_ITEM_TYPE = 'Tires';
 
     const PARAMS = {
-        SAVED_SEARCH_ID: 'custscript_wal_inv_feed_saved_search_id',
-        CLIENT_ID: 'custscript_wal_inv_feed_client_id',
-        CLIENT_SECRET: 'custscript_wal_inv_feed_client_secret',
-        ENVIRONMENT: 'custscript_wal_inv_feed_env',
-        BUCKET_SIZE: 'custscript_wal_inv_feed_bucket_size'
+        SAVED_SEARCH_ID: 'custscript_wal_price_feed_saved_search',
+        CLIENT_ID: 'custscript_wal_price_feed_client_id',
+        CLIENT_SECRET: 'custscript_wal_price_feed_client_secret',
+        ENVIRONMENT: 'custscript_wal_price_feed_env',
+        BUCKET_SIZE: 'custscript_wal_price_feed_bucket_size'
     };
 
     // ---------------------------------------------------------------------
@@ -145,7 +142,7 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
                 log.audit({
                     title: 'Computed bucket count',
                     details: `savedSearchId=${savedSearchId}, totalCount=${totalCount}, bucketSize=${bucketSize}, numBuckets=${computed}`
-                        + (computed < uncapped ? ` (capped from ${uncapped} -- raise custscript_wal_price_promo_feed_bucket_size if buckets are getting too large)` : '')
+                        + (computed < uncapped ? ` (capped from ${uncapped} -- raise ${PARAMS.BUCKET_SIZE} if buckets are getting too large)` : '')
                 });
                 return String(computed);
             }
@@ -386,8 +383,7 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
         const rawItems = context.values.map((v) => JSON.parse(v));
 
         // De-dupe by SKU before building the payload, keeping the last value
-        // seen -- same defensive guard as wm_mr_price_feed_upload.js (Walmart
-        // errors on any SKU submitted twice in one feed).
+        // seen (Walmart errors on any SKU submitted twice in one feed).
         const bySku = new Map();
         rawItems.forEach((item) => {
             if (bySku.has(item.sku)) {

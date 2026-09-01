@@ -17,13 +17,11 @@
  *     Seller Center. This tool can only record the decision in NetSuite,
  *     notify the team with the specifics, and hand them a link.
  *
- *  Decisions are per line, by quantity, not one Approve/Reject choice for
- *  the whole return -- each line gets a quantity approved for refund from 0
- *  up to the quantity requested, with a reason required whenever it's less
+ *  Decisions are per line, by quantity, each line gets a quantity approved for 
+ *  refund from 0 up to the quantity requested, with a reason required whenever it's less
  *  than the full amount. Quantity approved and reason live on
  *  customrecord_wal_return_line (one child record per Walmart
- *  returnOrderLine, synced by wm_mr_return_import.js), not on the parent
- *  return record.
+ *  returnOrderLine, synced by wm_mr_return_import.js).
  *
  *  Routes:
  *   PENDING INSPECTION (GET, no custpage_return_id): queue of every return
@@ -37,7 +35,8 @@
  *     editable quantity approved (0 to the full requested quantity), and a
  *     reason required whenever the quantity approved is less than
  *     requested, plus a mandatory "physically inspected" checkbox (required
- *     whenever any line's quantity approved is > 0). Submitting either:
+ *     whenever any line's quantity approved is > 0). 
+ *     Submitting either:
  *       - every line's quantity approved is 0: this IS the final decision
  *         (no refund call, nothing left to confirm) -- persists it to
  *         customrecord_wal_return_line immediately, writes review status

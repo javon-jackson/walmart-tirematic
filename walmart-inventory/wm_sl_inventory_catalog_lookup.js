@@ -201,8 +201,7 @@ define(
                     + `Fetched ${entries.length} SKU(s) across ${pagesFetched} page(s).\n`
                     + (cappedAt
                         ? `*** Stopped at the ${MAX_PAGES}-page safety cap -- Walmart still had more pages left (more `
-                            + 'SKUs exist than are shown below). Re-run wm_mr_inventory_reconciliation.js instead if you '
-                            + 'need the true full catalog, since Map/Reduce can page across multiple governance cycles. ***\n'
+                            + 'SKUs exist than are shown below). ***\n'
                         : '')
                     + `\n${summaryLines.join('\n')}`;
             } catch (e) {

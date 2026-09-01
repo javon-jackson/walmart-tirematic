@@ -29,9 +29,7 @@
  *
  * TODO:
  *   - getCancellableLines() treats orderLineStatuses entries with status "Created" OR
- *     "Acknowledged" as still-cancellable quantity on a line -- "Created" alone
- *     (this folder's sim-shipping-order.json fixture only shows that value, since it's
- *     a freshly-placed order) isn't enough: wm_mr_order_import.js acknowledges every
+ *     "Acknowledged" as still-cancellable quantity on a line. wm_mr_order_import.js acknowledges every
  *     order right after import, which flips each line to "Acknowledged" on Walmart's
  *     side, so by the time an order reaches this tool it's almost always past
  *     "Created". Still unconfirmed whether Walmart ever reports some other pre-ship

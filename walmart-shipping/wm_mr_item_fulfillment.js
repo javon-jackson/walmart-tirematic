@@ -34,7 +34,8 @@ define(['N/record', 'N/search', 'N/runtime', 'N/https', 'N/encode', 'N/crypto/ra
     };
 
     const TRACKING_NUM_FIELD = 'packagetrackingnumber';
-    // TODO: cannot view this fields potential values. Find them and map them to Walmarts expected carriers.
+    
+    // TODO: Find the expected values for this field and map them to Walmarts expected carriers.
     // Valid entries are: UPS, USPS, FedEx, Airborne, OnTrac, DHL Ecommerce - US, DHL, 
     // LS (LaserShip), UDS (United Delivery Service), UPSMI (UPS Mail Innovations), 
     // FDX, PILOT, ESTES, SAIA, FDS Express, Seko Worldwide, HIT Delivery, FEDEXSP (FedEx SmartPost), 

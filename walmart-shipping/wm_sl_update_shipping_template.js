@@ -33,6 +33,8 @@
  * Logging: writes to customrecord_wal_shipping_templates -- there is no field on that
  * record distinguishing a create row from an update row. If that distinction is ever
  * needed, add a field for it; don't infer create-vs-update from existing fields.
+ * 
+ * TODO: inspecting and updating shipping templates might be easier using the seller center UI.
  */
 define(
     ['N/record', 'N/runtime', 'N/https', 'N/encode', 'N/log', 'N/crypto/random', 'N/ui/serverWidget', 'N/ui/message', 'N/url'],

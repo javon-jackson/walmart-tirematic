@@ -12,9 +12,9 @@
  *     Walmart's DELETE endpoint.
  *
  * Script parameters:
- *   custscript_wal_del_notifsub_client_id  - Walmart Marketplace API Client ID
- *   custscript_wal_del_notifsub_secret     - Walmart Marketplace API Client Secret (Password field type)
- *   custscript_wal_del_notifsub_env        - "PRODUCTION" or "SANDBOX"
+ *   custscript_wal_del_notif_sub_client_id  - Walmart Marketplace API Client ID
+ *   custscript_wal_del_notif_sub_secret     - Walmart Marketplace API Client Secret (Password field type)
+ *   custscript_wal_del_notif_sub_env        - "PRODUCTION" or "SANDBOX"
  */
 define(
     ['N/record', 'N/runtime', 'N/https', 'N/encode', 'N/log', 'N/crypto/random', 'N/ui/serverWidget', 'N/ui/message', 'N/url'],
