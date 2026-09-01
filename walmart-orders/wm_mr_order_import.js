@@ -94,6 +94,13 @@
  *   custscript_wal_order_import_client_id  - Walmart Marketplace API Client ID
  *   custscript_wal_order_import_secret     - Walmart Marketplace API Client Secret (Password field type)
  *   custscript_wal_order_import_env        - "PRODUCTION" or "SANDBOX"
+ *   custscript_wal_order_import_fc_location_map - JSON string mapping Walmart order.shipNode.id
+ *                                              -> NetSuite Location internal ID, e.g.
+ *                                              {"10003175879":"1","20005551234":"34"} -- the
+ *                                              inverse of wm_mr_inventory_feed_upload_multinode.js's
+ *                                              ship node map. An order whose shipNode.id isn't a key
+ *                                              here falls back to DEFAULT_LOCATION_ID (logged, not thrown,
+ *                                              so an unmapped/new fulfillment center never blocks order import).
  *   custscript_wal_qbo_client_id            - QBO app Client ID (the dedicated Walmart-import app, NOT the existing Elite Wheel one)
  *   custscript_wal_qbo_client_secret        - QBO app Client Secret (Password field type)
  *   custscript_wal_qbo_company_id           - QBO company id / realmId
@@ -127,6 +134,7 @@
  *
  * TODO: MISSING_ITEM_ALERT_AUTHOR (below) is a placeholder -- set it to a real
  * NetSuite employee internal id before this can send email.
+ * TODO: update fulfillment center -> location map when production FCs are created.
  */
 define(
     ['N/record', 'N/search', 'N/runtime', 'N/https', 'N/encode', 'N/cache', 'N/log', 'N/crypto/random', 'N/email'],
@@ -148,7 +156,8 @@ define(
             QBO_ENVIRONMENT: 'custscript_wal_qbo_env',
             QBO_INCOME_ACCOUNT_ID: 'custscript_wal_qbo_income_acct_id',
             QBO_EXPENSE_ACCOUNT_ID: 'custscript_wal_qbo_expense_acct_id',
-            QBO_AP_ACCOUNT_ID: 'custscript_wal_qbo_ap_id'
+            QBO_AP_ACCOUNT_ID: 'custscript_wal_qbo_ap_id',
+            FC_LOCATION_MAP: 'custscript_wal_order_import_fc_loc_map'
         };
 
         const QBO_BASE_URLS = {
@@ -191,14 +200,15 @@ define(
 
         // TODO: placeholder -- replace with the real NetSuite employee internal id to send
         // missing-item alert emails from (email.send() requires an author).
-        const MISSING_ITEM_ALERT_AUTHOR = null; // 126971 for elite labels
+        const MISSING_ITEM_ALERT_AUTHOR = 126970; // 126971 for elite labels, 126970 = me
         // Same people as fedex-labels-mr.js's ITEM_DATA_ALERT_RECIPIENT, minus
         // labels@ewwfl.com.
         const MISSING_ITEM_ALERT_RECIPIENTS = [
-            12493, // Nick
-            82292, // Moka Kash
-            28068, // Camilo Espinosa
-            13     // Ricky Chavez
+            // 12493, // Nick
+            // 82292, // Moka Kash
+            // 28068, // Camilo Espinosa
+            // 13     // Ricky Chavez
+            126970 // Me
         ];
 
         /**
@@ -300,6 +310,15 @@ define(
 
         function getScriptParams() {
             const script = runtime.getCurrentScript();
+
+            const fcLocationMapRaw = script.getParameter({ name: PARAMS.FC_LOCATION_MAP });
+            let fcLocationMap = {};
+            try {
+                fcLocationMap = fcLocationMapRaw ? JSON.parse(fcLocationMapRaw) : {};
+            } catch (e) {
+                throw new Error(`${PARAMS.FC_LOCATION_MAP} is not valid JSON: ${e.message}`);
+            }
+
             return {
                 poId: script.getParameter({ name: PARAMS.PO_ID }) || null,
                 clientId: script.getParameter({ name: PARAMS.CLIENT_ID }),
@@ -311,7 +330,8 @@ define(
                 qboEnvironment: (script.getParameter({ name: PARAMS.QBO_ENVIRONMENT }) || 'SANDBOX').toUpperCase(),
                 qboIncomeAccountId: script.getParameter({ name: PARAMS.QBO_INCOME_ACCOUNT_ID }),
                 qboExpenseAccountId: script.getParameter({ name: PARAMS.QBO_EXPENSE_ACCOUNT_ID }),
-                qboApAccountId: script.getParameter({ name: PARAMS.QBO_AP_ACCOUNT_ID })
+                qboApAccountId: script.getParameter({ name: PARAMS.QBO_AP_ACCOUNT_ID }),
+                fcLocationMap
             };
         }
 
@@ -477,7 +497,7 @@ define(
                 });
 
                 const orderDetails = getOrderDetails({ accessToken, baseUrl, purchaseOrderId, correlationId, environment: ctx.environment });
-                const salesOrderId = buildSalesOrderFromWalmartOrder(orderDetails);
+                const salesOrderId = buildSalesOrderFromWalmartOrder(orderDetails, ctx.fcLocationMap);
                 // save() only returns the internal id -- tranid is system-assigned at save time,
                 // so it has to be read back separately rather than pulled off the in-memory record.
                 const salesOrderTranId = search.lookupFields({ type: search.Type.SALES_ORDER, id: salesOrderId, columns: ['tranid'] }).tranid;
@@ -1017,7 +1037,7 @@ define(
         const SO_STATUS = '5'; // "HOLD - Waiting for additional items"
         const DELIVERY_TYPE_FIELD = 'custbody_delivery_type';
         const DELIVERY_TYPE = '12'; // "Customer's Account"
-        const TAMPA_LOCATION_ID = '1';
+        const DEFAULT_LOCATION_ID = '1'; // Tampa -- fallback when shipNode.id isn't in FC_LOCATION_MAP
 
         /**
          * Creates a NetSuite Sales Order from a GET /v3/orders/{purchaseOrderId}
@@ -1025,27 +1045,29 @@ define(
          * for the full schema).
          *
          * Memo, Location, Delivery Type, and SO Status are mandatory on this account's
-         * Sales Order form but have nothing to do with Walmart's order data, so they're
-         * fixed values every Walmart order gets: Location = Tampa, Delivery Type =
-         * Customer's Account, SO Status = HOLD - Waiting for additional items
-         * (SO_STATUS_FIELD/DELIVERY_TYPE_FIELD/TAMPA_LOCATION_ID's usage elsewhere in the
-         * netsuite-scripts repo confirms the field ids; SO_STATUS/DELIVERY_TYPE's actual
-         * values are an intentional choice for Walmart orders specifically, not a default
-         * carried over from that other usage). Revisit if Walmart orders ever need a
-         * different location or shouldn't start on HOLD.
+         * Sales Order form but have nothing to do with Walmart's order data. Delivery
+         * Type/SO Status are fixed values (Customer's Account / HOLD - Waiting for
+         * additional items); Location is looked up from order.shipNode.id via
+         * fcLocationMap, falling back to DEFAULT_LOCATION_ID (logged) if unmapped.
          */
-        function buildSalesOrderFromWalmartOrder(orderDetails) {
+        function buildSalesOrderFromWalmartOrder(orderDetails, fcLocationMap) {
             const purchaseOrderId = orderDetails.purchaseOrderId;
             const orderLines = (orderDetails.orderLines && orderDetails.orderLines.orderLine) || [];
             if (!orderLines.length) {
                 throw new Error(`Walmart order ${purchaseOrderId} has no order lines`);
             }
 
+            const shipNodeId = orderDetails.shipNode && orderDetails.shipNode.id;
+            const locationId = (shipNodeId && fcLocationMap[shipNodeId]) || DEFAULT_LOCATION_ID;
+            if (shipNodeId && !fcLocationMap[shipNodeId]) {
+                log.error('Unmapped shipNode -- falling back to DEFAULT_LOCATION_ID', { purchaseOrderId, shipNodeId });
+            }
+
             const salesOrder = record.create({ type: record.Type.SALES_ORDER, isDynamic: true });
             salesOrder.setValue({ fieldId: 'entity', value: TIREMATIC_CUSTOMER_ID });   // Customer
             salesOrder.setValue({ fieldId: 'otherrefnum', value: String(purchaseOrderId) }); // PO#
             salesOrder.setValue({ fieldId: 'memo', value: `Walmart order ${purchaseOrderId}` });
-            salesOrder.setValue({ fieldId: 'location', value: TAMPA_LOCATION_ID });     // TODO: location should be set based on ship node.
+            salesOrder.setValue({ fieldId: 'location', value: locationId });
             salesOrder.setValue({ fieldId: 'custbody_walmart_order', value: true });      // Checkbox identifying this as a Walmart order.
             salesOrder.setValue({ fieldId: DELIVERY_TYPE_FIELD, value: DELIVERY_TYPE });
             salesOrder.setValue({ fieldId: SO_STATUS_FIELD, value: SO_STATUS });
