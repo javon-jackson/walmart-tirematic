@@ -3,23 +3,21 @@
  * @NScriptType Suitelet
  *
  * On-demand Walmart feed status lookup. Enter a feedId from
- * customrecord_wal_feed_submission (written by wm_mr_tire_upload.js,
- * wm_mr_inventory_feed_upload.js, or wm_mr_price_feed_upload.js) and this
- * checks GET /v3/feeds/{feedId} against Walmart, using whichever environment
- * THIS deployment's custscript_wal_feed_env is set to. Updates
- * the matching tracking record's status/details if one exists.
+ * customrecord_wal_feed_submission. Updates the matching tracking record's
+ * status/details if one exists.
  *
  *
  * "Resubmit Failed Feed" action: for a tracking record whose last known
  * STATUS is ERROR, rebuilds and resubmits the feed from that record's own
- * ENVIRONMENT/FEED_TYPE/SKUS -- no NetSuite lookup needed. Only works for
- * FEED_TYPE "price"/"inventory", since SKUS there holds `{sku, amount}`
- * pairs (enough to rebuild the payload). "MP_ITEM" SKUS is just a
- * `|`-delimited list -- content resubmission needs the full per-item
- * payload, which isn't stored anywhere; re-run wm_mr_tire_upload.js instead
- * (optionally filtered to the failed SKUs). A successful resubmit writes a
- * NEW tracking record (RETRY_OF pointing at the original) rather than
- * overwriting the failed one, so history stays visible.
+ * ENVIRONMENT/FEED_TYPE/SKUS. Works for FEED_TYPE "price"/"inventory"/
+ * "MP_INVENTORY"/"PRICE_AND_PROMOTION", since SKUS there holds enough to
+ * rebuild the payload (flat {sku, amount} for price/inventory/
+ * PRICE_AND_PROMOTION; {sku, shipNodes: [{shipNode, amount}]} for
+ * MP_INVENTORY). "price"/"inventory" submit as multipart/form-data;
+ * "MP_INVENTORY"/"PRICE_AND_PROMOTION" submit as plain JSON -- see
+ * buildResubmitPayload()'s per-type contentType. A successful resubmit
+ * writes a NEW tracking record (RETRY_OF pointing at the original) rather
+ * than overwriting the failed one, so history stays visible.
  *
  * Script parameters:
  *   custscript_wal_feed_client_id       - Walmart Marketplace API Client ID
@@ -40,6 +38,12 @@ define(
             SANDBOX: 'https://sandbox.walmartapis.com'
         };
 
+        const PARAMS = {
+            CLIENT_ID: 'custscript_wal_feed_client_id',
+            CLIENT_SECRET: 'custscript_wal_feed_client_secret',
+            ENVIRONMENT: 'custscript_wal_feed_env'
+        };
+
         const FEED_RECORD = {
             TYPE: 'customrecord_wal_feed_submission',
             FIELDS: {
@@ -58,14 +62,18 @@ define(
             }
         };
 
-        // Resubmittable feed envelopes, duplicated from
-        // Only works for FEED_TYPE "price"/"inventory", 
-        // since SKUS there holds `{sku, amount}` pairs (enough to rebuild the payload)
+        const RESUBMITTABLE_FEED_TYPES = ['price', 'inventory', 'MP_INVENTORY', 'PRICE_AND_PROMOTION'];
+
+        // Resubmittable feed envelopes
         const CURRENCY = 'USD';
         const PRICE_TYPE = 'BASE';
         const PRICE_HEADER_VERSION = '1.7';
         const QUANTITY_UNIT = 'EACH';
         const INVENTORY_HEADER_VERSION = '1.4';
+        const MULTINODE_INVENTORY_HEADER_VERSION = '1.5';
+        const PRICE_PROMO_BUSINESS_UNIT = 'WALMART_US';
+        const PRICE_PROMO_LOCALE = 'en';
+        const PRICE_PROMO_HEADER_VERSION = '2.0.20240126-12_25_52-api'; // see wm_mr_price_feed_upload.js's own HEADER_VERSION note -- not yet confirmed live
         const WALMART_ITEM_TYPE = 'Tires';
 
         /**
@@ -178,9 +186,9 @@ define(
         function getScriptParams() {
             const script = runtime.getCurrentScript();
             return {
-                clientId: script.getParameter({ name: 'custscript_wal_feed_client_id' }),
-                clientSecret: script.getParameter({ name: 'custscript_wal_feed_client_secret' }),
-                defaultEnvironment: script.getParameter({ name: 'custscript_wal_feed_env' }) || 'SANDBOX'
+                clientId: script.getParameter({ name: PARAMS.CLIENT_ID }),
+                clientSecret: script.getParameter({ name: PARAMS.CLIENT_SECRET }),
+                defaultEnvironment: (script.getParameter({ name: PARAMS.ENVIRONMENT }) || 'SANDBOX').toUpperCase()
             };
         }
 
@@ -200,8 +208,7 @@ define(
 
         /**
          * Updates the tracking record with the latest status check. Stores
-         * Walmart's feedStatus as-is (confirmed enum: RECEIVED/INPROGRESS/
-         * PROCESSED/ERROR), not remapped to a separate enum of our own.
+         * Walmart's feedStatus as-is.
          * Leaves CORRELATION_ID untouched -- that holds the original
          * submission's ID (what Walmart support needs to trace the feed back
          * to its creation), not this check's own ID, which is already
@@ -251,75 +258,103 @@ define(
         }
 
         /**
-         * Builds the resubmit feed JSON, branching on FEED_TYPE -- same
-         * envelopes as wm_mr_price_feed_upload.js/wm_mr_inventory_feed_upload.js.
-         * Throws for any other feedType (see file header for why "MP_ITEM"
-         * can't work this way).
-         * @param {string} feedType - "price" or "inventory"
-         * @param {{sku: string, amount: number}[]} items
-         */
-        function buildResubmitPayload(feedType, items) {
-            if (feedType === 'price') {
-                return {
-                    json: JSON.stringify({
-                        PriceHeader: { version: PRICE_HEADER_VERSION },
-                        Price: items.map(({ sku, amount }) => ({
-                            sku,
-                            pricing: [{
-                                currentPrice: { currency: CURRENCY, amount },
-                                currentPriceType: PRICE_TYPE
-                            }]
-                        }))
-                    }),
-                    filename: 'price-feed.json',
-                    boundaryPrefix: 'WalmartPriceFeedBoundary'
-                };
-            }
-            if (feedType === 'inventory') {
-                return {
-                    json: JSON.stringify({
-                        InventoryHeader: { version: INVENTORY_HEADER_VERSION },
-                        Inventory: items.map(({ sku, amount }) => ({
-                            sku,
-                            quantity: { unit: QUANTITY_UNIT, amount }
-                        }))
-                    }),
-                    filename: 'inventory-feed.json',
-                    boundaryPrefix: 'WalmartInventoryFeedBoundary'
-                };
-            }
-            throw new Error(`Resubmit isn't supported for feedType "${feedType}" -- only "price" and "inventory" `
-                + 'feeds can be rebuilt from their tracking record alone. For an "MP_ITEM" content feed, re-run '
-                + 'wm_mr_tire_upload.js instead (optionally filtered to just the failed SKUs).');
-        }
-
-        /**
          * Hand-builds a multipart/form-data body with one "file" part --
          * N/https has no native multipart helper, same approach as the
-         * feed-upload M/R scripts. filename is parameterized since
-         * price/inventory use different ones.
+         * feed-upload M/R scripts. Used only by the legacy "price"/"inventory"
+         * feed types below -- "MP_INVENTORY"/"PRICE_AND_PROMOTION" submit
+         * plain JSON instead, see buildResubmitPayload().
+         * @returns {{body: string, contentType: string}}
          */
-        function buildMultipartBody(fileContent, boundary, filename) {
+        function buildMultipartPayload(fileContent, filename, boundaryPrefix) {
             const CRLF = '\r\n';
-            return `--${boundary}${CRLF}`
+            const boundary = `----${boundaryPrefix}${random.generateUUID().replace(/-/g, '')}`;
+            const body = `--${boundary}${CRLF}`
                 + `Content-Disposition: form-data; name="file"; filename="${filename}"${CRLF}`
                 + `Content-Type: application/json${CRLF}`
                 + CRLF
                 + fileContent + CRLF
                 + `--${boundary}--${CRLF}`;
+            return { body, contentType: `multipart/form-data; boundary=${boundary}` };
         }
 
         /**
-         * Resubmits a price/inventory feed via POST /v3/feeds?feedType=...,
-         * rebuilt from the tracking record's SKUS alone -- no saved search
-         * involved.
+         * Builds the resubmit feed body + Content-Type, branching on
+         * FEED_TYPE -- same envelopes as wm_mr_price_feed_upload.js/
+         * wm_mr_inventory_feed_upload.js/wm_mr_inventory_feed_upload_multinode.js.
+         * "price"/"inventory" wrap as multipart/form-data (legacy transport);
+         * "MP_INVENTORY"/"PRICE_AND_PROMOTION" are plain JSON, no wrapping.
+         * Throws for any other feedType (see file header for why "MP_ITEM"
+         * can't work this way).
+         * @param {string} feedType
+         * @param {Array} items - {sku, amount}[] for price/inventory/PRICE_AND_PROMOTION;
+         *                        {sku, shipNodes: [{shipNode, amount}]}[] for MP_INVENTORY
+         * @returns {{body: string, contentType: string}}
+         */
+        function buildResubmitPayload(feedType, items) {
+            if (feedType === 'price') {
+                const json = JSON.stringify({
+                    PriceHeader: { version: PRICE_HEADER_VERSION },
+                    Price: items.map(({ sku, amount }) => ({
+                        sku,
+                        pricing: [{
+                            currentPrice: { currency: CURRENCY, amount },
+                            currentPriceType: PRICE_TYPE
+                        }]
+                    }))
+                });
+                return buildMultipartPayload(json, 'price-feed.json', 'WalmartPriceFeedBoundary');
+            }
+            if (feedType === 'inventory') {
+                const json = JSON.stringify({
+                    InventoryHeader: { version: INVENTORY_HEADER_VERSION },
+                    Inventory: items.map(({ sku, amount }) => ({
+                        sku,
+                        quantity: { unit: QUANTITY_UNIT, amount }
+                    }))
+                });
+                return buildMultipartPayload(json, 'inventory-feed.json', 'WalmartInventoryFeedBoundary');
+            }
+            if (feedType === 'MP_INVENTORY') {
+                const json = JSON.stringify({
+                    inventoryHeader: { version: MULTINODE_INVENTORY_HEADER_VERSION },
+                    inventory: items.map(({ sku, shipNodes }) => ({
+                        sku,
+                        shipNodes: (shipNodes || []).map(({ shipNode, amount }) => ({
+                            shipNode,
+                            quantity: { unit: QUANTITY_UNIT, amount }
+                        }))
+                    }))
+                });
+                return { body: json, contentType: 'application/json' };
+            }
+            if (feedType === 'PRICE_AND_PROMOTION') {
+                const json = JSON.stringify({
+                    MPItemFeedHeader: {
+                        businessUnit: PRICE_PROMO_BUSINESS_UNIT,
+                        version: PRICE_PROMO_HEADER_VERSION,
+                        locale: PRICE_PROMO_LOCALE
+                    },
+                    MPItem: items.map(({ sku, amount }) => ({
+                        'Promo&Discount': { sku, price: amount }
+                    }))
+                });
+                return { body: json, contentType: 'application/json' };
+            }
+            throw new Error(`Resubmit isn't supported for feedType "${feedType}" -- only `
+                + `${RESUBMITTABLE_FEED_TYPES.map((t) => `"${t}"`).join('/')} feeds can be rebuilt from their `
+                + 'tracking record alone. For an "MP_ITEM"/"SKU_TEMPLATE_MAP" content feed, re-run the '
+                + 'originating M/R script instead (optionally filtered to just the failed SKUs).');
+        }
+
+        /**
+         * Resubmits a feed via POST /v3/feeds?feedType=..., rebuilt from the
+         * tracking record's SKUS alone -- no saved search involved. Transport
+         * (multipart vs plain JSON) is decided entirely by buildResubmitPayload().
          * @returns {string} the NEW feedId Walmart assigns to this resubmission
          */
         function submitResubmittedFeed(params) {
             const { accessToken, baseUrl, feedType, items, correlationId } = params;
-            const { json, filename, boundaryPrefix } = buildResubmitPayload(feedType, items);
-            const boundary = `----${boundaryPrefix}${random.generateUUID().replace(/-/g, '')}`;
-            const body = buildMultipartBody(json, boundary, filename);
+            const { body, contentType } = buildResubmitPayload(feedType, items);
 
             const response = https.post({
                 url: `${baseUrl}/v3/feeds?feedType=${feedType}`,
@@ -330,7 +365,7 @@ define(
                     'WM_QOS.CORRELATION_ID': correlationId,
                     'WM_SVC.NAME': 'Walmart Marketplace',
                     'Accept': 'application/json',
-                    'Content-Type': `multipart/form-data; boundary=${boundary}`
+                    'Content-Type': contentType
                 }
             });
 
@@ -460,8 +495,9 @@ define(
                     updateFeedRecord(recordId, status);
                     resultText += `\n\n(Updated customrecord_wal_feed_submission #${recordId}.)`;
                     if (status.feedStatus === 'ERROR') {
-                        resultText += '\n\nTo resubmit this feed (price/inventory feed types only), switch the '
-                            + 'Action dropdown above to "Resubmit Failed Feed" and submit again with the same Feed ID.';
+                        resultText += `\n\nTo resubmit this feed (${RESUBMITTABLE_FEED_TYPES.join('/')} feed types `
+                            + 'only), switch the Action dropdown above to "Resubmit Failed Feed" and submit again '
+                            + 'with the same Feed ID.';
                     }
                 } else {
                     resultText += '\n\n(No matching customrecord_wal_feed_submission found for this feed ID -- not saved.)';
@@ -475,10 +511,10 @@ define(
         }
 
         /**
-         * "Resubmit Failed Feed" -- rebuilds and resubmits a price/inventory
-         * feed from its tracking record's SKUS alone. Requires STATUS to
-         * already be ERROR (run "Check Status" first) so a healthy feed
-         * can't be resubmitted by accident.
+         * "Resubmit Failed Feed" -- rebuilds and resubmits a feed from its
+         * tracking record's SKUS alone. Requires STATUS to already be ERROR
+         * (run "Check Status" first) so a healthy feed can't be resubmitted
+         * by accident.
          */
         function handleResubmit(params) {
             const { feedId, clientId, clientSecret, confirmReretry } = params;
@@ -493,10 +529,10 @@ define(
                 return `customrecord_wal_feed_submission #${recordId}'s last known status is "${details.status}", `
                     + 'not ERROR -- run "Check Status" first to confirm this feed has actually failed before resubmitting it.';
             }
-            if (details.feedType !== 'price' && details.feedType !== 'inventory') {
+            if (!RESUBMITTABLE_FEED_TYPES.includes(details.feedType)) {
                 return `customrecord_wal_feed_submission #${recordId} is FEED_TYPE "${details.feedType}", which `
-                    + 'can\'t be resubmitted from its tracking record alone (only "price" and "inventory" feeds can). '
-                    + 'For an "MP_ITEM" content feed, re-run wm_mr_tire_upload.js instead.';
+                    + `can't be resubmitted from its tracking record alone (only ${RESUBMITTABLE_FEED_TYPES.join('/')} `
+                    + 'feeds can). For an "MP_ITEM"/"SKU_TEMPLATE_MAP" content feed, re-run the originating M/R script instead.';
             }
 
             // Warns rather than hard-blocking -- an earlier retry may have
