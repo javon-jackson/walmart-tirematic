@@ -2,59 +2,43 @@
  * @NApiVersion 2.1
  * @NScriptType MapReduceScript
  *
- * Bulk BASE price push via Walmart's asynchronous LEGACY price feed
- * (feedType=price -- "Update bulk prices (Legacy)", multipart/form-data,
- * `PriceHeader`/`Price` envelope).
+ * Bulk BASE price push via Walmart's PRICE_AND_PROMOTION feed.
  *
  * Pulls SKU + Base Price from a NetSuite saved search, batches each
- * reduce() bucket's items into one feed file, and submits via
- * POST /v3/feeds?feedType=price. Processing is asynchronous (minutes to
- * hours) -- tracked the same way as every other feed type in this project:
- * writes to the SHARED customrecord_wal_feed_submission record
- * (FEED_TYPE="price" distinguishes these rows from "inventory"/"MP_ITEM"),
- * for wm_sl_feed_status.js to check status on later.
+ * reduce() bucket's items into one feed submission, and submits via
+ * POST /v3/feeds?feedType=PRICE_AND_PROMOTION. Unlike the legacy feed, this
+ * one is a plain JSON POST body -- no multipart/form-data wrapping. 
+ * Feed submissions are tracked in a customrecord_wal_feed_submission record for 
+ * wm_sl_feed_status.js to check status on later.
  *
+ * SCOPE: BASE price only.
+ * 
  * Per Walmart's docs: wait at least 5 minutes after submission before
- * checking status -- per-SKU results aren't available until the ENTIRE feed
- * finishes processing (checking too early just shows RECEIVED/INPROGRESS).
- * Also per Walmart: submitting the same SKU more than once in one feed
- * errors that SKU -- reduce() below de-dupes by SKU before building the
- * payload (keeping the last value seen) as a defensive guard, even though a
- * plain Item saved search shouldn't normally produce duplicate rows for the
- * same item.
+ * checking status. Also per Walmart: submitting the same SKU more than once
+ * in one feed errors that SKU -- reduce() below de-dupes by SKU before
+ * building the payload (keeping the last value seen).
  *
- * RATE LIMIT: POST /v3/feeds?feedType=price
- * (Legacy) is limited to 10 requests/hour, same as the other feed types in
- * this project. Bucket COUNT is capped at MAX_BUCKETS_PER_HOUR (10) so a
- * single run never attempts more submissions than Walmart allows -- a
- * catalog spike just produces fewer, larger buckets instead. A submission
- * that still 429s anyway (e.g. another script or a manual resubmit used up
- * the hour's quota first) is logged as a reduce error, not silently lost.
+ * RATE LIMIT: POST /v3/feeds?feedType=PRICE_AND_PROMOTION is limited to 10
+ * requests/hour. Bucket COUNT is capped at MAX_BUCKETS_PER_HOUR (10) so a single run never
+ * attempts more submissions than Walmart allows.
  *
- * Also per that doc: this API shouldn't be called sooner than 24 hours
- * after a new item is set up (before Walmart has assigned it a wpid) -- not
- * enforced in code, just worth knowing if a freshly-uploaded item's price
- * push comes back with an error.
- *
- * Currency is hardcoded to USD and currentPriceType to "BASE".
  *
  * Script parameters:
- *   custscript_wal_price_feed_saved_search  - internal ID of a saved search
- *                                             on Item with SKU + Base Price
- *                                             columns (same "pricing.unitprice"
- *                                             column label wm_mr_tire_upload.js
- *                                             uses for price)
- *   custscript_wal_price_feed_client_id     - Walmart Marketplace API Client ID
- *   custscript_wal_price_feed_client_secret - Walmart Marketplace API Client Secret (Password field type)
- *   custscript_wal_price_feed_env           - "PRODUCTION" or "SANDBOX"
- *   custscript_wal_price_feed_bucket_size   - TARGET items per bucket (default 1000, Walmart's
- *                                             recommended max -- see the tradeoff note above about
- *                                             hashing not giving a hard per-bucket guarantee) -- NOT
- *                                             a bucket count; getNumBuckets() below divides the saved
- *                                             search's total row count by this to compute how many
- *                                             buckets to hash into, so it doesn't need re-tuning as
- *                                             the catalog grows the way a fixed bucket count would
+ *   custscript_wal_price_promo_feed_saved_search  - internal ID of a saved search
+ *                                                    on Item with SKU + Base Price
+ *                                                    columns (same shape
+ *                                                    wm_mr_price_feed_upload.js uses --
+ *                                                    can be the same saved search)
+ *   custscript_wal_price_promo_feed_client_id     - Walmart Marketplace API Client ID
+ *   custscript_wal_price_promo_feed_client_secret - Walmart Marketplace API Client Secret (Password field type)
+ *   custscript_wal_price_promo_feed_env           - "PRODUCTION" or "SANDBOX"
+ *   custscript_wal_price_promo_feed_bucket_size   - TARGET items per bucket (default 1000) --
+ *                                                    NOT a bucket count; getNumBuckets() below
+ *                                                    divides the saved search's total row count
+ *                                                    by this to compute how many buckets to hash into
  *
+ * MPItemFeedHeader.version is hardcoded (see HEADER_VERSION below) to Walmart's published
+ * example value "2.0.20240126-12_25_52-api" -- a doc sample.
  */
 define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/crypto/random', 'N/cache'], (search, runtime, log, https, encode, record, random, cache) => {
 
@@ -63,25 +47,29 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
         SANDBOX: 'https://sandbox.walmartapis.com'
     };
 
-
     const COLUMNS = {
         SKU: 'itemid',
-        PRICE: 'unitprice.pricing' // Price Level MPM
+        PRICE: 'unitprice.pricing' // Price Level MPM -- same column label wm_mr_price_feed_upload.js uses
     };
 
-    const CURRENCY = 'USD';
-    const PRICE_TYPE = 'BASE';
+    const BUSINESS_UNIT = 'WALMART_US';
+    const LOCALE = 'en';
+    const HEADER_VERSION = '2.0.20240126-12_25_52-api'; // see file header -- verify before going live
 
-    // https://developer.walmart.com/us-marketplace/reference/pricebulkuploads
-    // Download sample body.
-    const PRICE_HEADER_VERSION = '1.7';
-
-    const 
-    FEED_TYPE = 'price';
+    const FEED_TYPE = 'PRICE_AND_PROMOTION';
     const WALMART_ITEM_TYPE = 'Tires';
 
+    const PARAMS = {
+        SAVED_SEARCH_ID: 'custscript_wal_inv_feed_saved_search_id',
+        CLIENT_ID: 'custscript_wal_inv_feed_client_id',
+        CLIENT_SECRET: 'custscript_wal_inv_feed_client_secret',
+        ENVIRONMENT: 'custscript_wal_inv_feed_env',
+        BUCKET_SIZE: 'custscript_wal_inv_feed_bucket_size'
+    };
+
     // ---------------------------------------------------------------------
-    // Feed tracking
+    // Feed tracking -- same shared record every other feed script in this
+    // project writes to.
     // ---------------------------------------------------------------------
     const FEED_RECORD = {
         TYPE: 'customrecord_wal_feed_submission',
@@ -127,27 +115,20 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
         return raw;
     }
 
-    // Covers one full run of this M/R job (low-hundreds-to-low-thousands SKU
-    // catalog) without recomputing the bucket count on every map() call.
+    // Covers one full run of this M/R job without recomputing the bucket
+    // count on every map() call.
     const BUCKET_CACHE_TTL_SECONDS = 3600;
-    const BUCKET_CACHE_NAME = 'wal_bulk_price_feed_buckets';
+    const BUCKET_CACHE_NAME = 'wal_price_promo_feed_buckets';
 
-    // POST /v3/feeds?feedType=price is limited to 10 requests/hour,
-    // one feed submission per bucket, so the bucket count
-    // itself must never exceed this.
+    // POST /v3/feeds?feedType=PRICE_AND_PROMOTION is limited to 10 requests/hour,
+    // one feed submission per bucket, so the bucket count itself must never exceed this.
     const MAX_BUCKETS_PER_HOUR = 10;
 
     /**
      * Computes (and caches) how many buckets to hash items across, via a
-     * CHEAP count-only query -- search.runPaged().count returns just the row
-     * count, not the rows, avoiding the governance cost of an earlier
-     * version that materialized the whole catalog (reverted -- see
-     * [[pricing_management_started]] in memory for why). Cached via N/cache
-     * so map() isn't re-running a search for this number on every row:
-     * getInputData() populates it once via the loader below; if the entry
-     * expires mid-run, a later map() call just recomputes it rather than
-     * failing. Keyed by savedSearchId + bucketSize so a stale value from a
-     * different search/bucket-size combo is never reused.
+     * cheap count-only query -- same approach as every other feed script in
+     * this project. Keyed by savedSearchId + bucketSize so a stale value
+     * from a different combo is never reused.
      * @param {string} savedSearchId
      * @param {number} bucketSize - target items per bucket
      * @returns {number}
@@ -164,7 +145,7 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
                 log.audit({
                     title: 'Computed bucket count',
                     details: `savedSearchId=${savedSearchId}, totalCount=${totalCount}, bucketSize=${bucketSize}, numBuckets=${computed}`
-                        + (computed < uncapped ? ` (capped from ${uncapped} -- raise custscript_wal_price_feed_bucket_size if buckets are getting too large)` : '')
+                        + (computed < uncapped ? ` (capped from ${uncapped} -- raise custscript_wal_price_promo_feed_bucket_size if buckets are getting too large)` : '')
                 });
                 return String(computed);
             }
@@ -173,9 +154,9 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
     }
 
     // ---------------------------------------------------------------------
-    // Walmart Marketplace Legacy Price Feed API client
+    // Walmart Marketplace Price & Promotion Feed API client
     // Docs: https://developer.walmart.com/us-marketplace/reference/tokenapi
-    //       https://developer.walmart.com/us-marketplace/reference/pricebulkuploads
+    //       https://developer.walmart.com/us-marketplace/reference/post_v3-feeds-feedtype-price-and-promotion
     // ---------------------------------------------------------------------
 
     /** Same OAuth client-credentials flow as every other script in this project. */
@@ -212,59 +193,42 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
     }
 
     /**
-     * Wraps a batch of {sku, amount} pairs in the legacy price feed
-     * envelope -- one `pricing` entry per SKU, same currentPrice/
-     * currentPriceType shape as wm_sl_base_price_lkup_update.js's
-     * updatePrice() (PUT /v3/price).
+     * Wraps a batch of {sku, amount} pairs in the PRICE_AND_PROMOTION feed
+     * envelope -- one MPItem/Promo&Discount entry per SKU, BASE price only
+     * (see file header SCOPE note).
      * @param {{sku: string, amount: number}[]} items
-     * @returns {string} JSON string ready to embed in the multipart body
+     * @param {string} headerVersion
+     * @returns {string} JSON string ready to POST directly (no multipart wrapping)
      */
-    function buildFeedPayload(items) {
+    function buildFeedPayload(items, headerVersion) {
         return JSON.stringify({
-            PriceHeader: { version: PRICE_HEADER_VERSION },
-            Price: items.map(({ sku, amount }) => ({
-                sku,
-                pricing: [{
-                    currentPrice: { currency: CURRENCY, amount },
-                    currentPriceType: PRICE_TYPE
-                }]
+            MPItemFeedHeader: {
+                businessUnit: BUSINESS_UNIT,
+                version: headerVersion,
+                locale: LOCALE
+            },
+            MPItem: items.map(({ sku, amount }) => ({
+                'Promo&Discount': { sku, price: amount }
             }))
         });
     }
 
     /**
-     * Hand-builds a multipart/form-data body containing a single "file"
-     * part.
-     * @param {string} fileContent - the feed JSON string
-     * @param {string} boundary
-     * @returns {string}
-     */
-    function buildMultipartBody(fileContent, boundary) {
-        const CRLF = '\r\n';
-        return `--${boundary}${CRLF}`
-            + `Content-Disposition: form-data; name="file"; filename="price-feed.json"${CRLF}`
-            + `Content-Type: application/json${CRLF}`
-            + CRLF
-            + fileContent + CRLF
-            + `--${boundary}--${CRLF}`;
-    }
-
-    /**
-     * Submits a batch of items as a legacy price feed via
-     * POST /v3/feeds?feedType=price (multipart/form-data).
+     * Submits a batch of items as a PRICE_AND_PROMOTION feed via
+     * POST /v3/feeds?feedType=PRICE_AND_PROMOTION -- plain JSON body, unlike
+     * the legacy feed's multipart/form-data.
      * @param {Object} params
      * @param {string} params.accessToken
      * @param {string} params.baseUrl
      * @param {{sku: string, amount: number}[]} params.items
+     * @param {string} params.headerVersion
      * @param {string} params.correlationId
      * @returns {string} feedId
      */
     function submitPriceFeed(params) {
-        const { accessToken, baseUrl, items, correlationId } = params;
+        const { accessToken, baseUrl, items, headerVersion, correlationId } = params;
 
-        const feedJson = buildFeedPayload(items);
-        const boundary = `----WalmartPriceFeedBoundary${random.generateUUID().replace(/-/g, '')}`;
-        const body = buildMultipartBody(feedJson, boundary);
+        const body = buildFeedPayload(items, headerVersion);
 
         const response = https.post({
             url: `${baseUrl}/v3/feeds?feedType=${FEED_TYPE}`,
@@ -275,7 +239,7 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
                 'WM_QOS.CORRELATION_ID': correlationId,
                 'WM_SVC.NAME': 'Walmart Marketplace',
                 'Accept': 'application/json',
-                'Content-Type': `multipart/form-data; boundary=${boundary}`
+                'Content-Type': 'application/json'
             }
         });
 
@@ -283,13 +247,13 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
             // responseCode is attached (not just embedded in the message) so
             // reduce()'s catch block can distinguish a 429 rate-limit from
             // any other failure without parsing this string.
-            const error = new Error(`Walmart price feed submission failed (${response.code}): ${response.body}`);
+            const error = new Error(`Walmart price & promotion feed submission failed (${response.code}): ${response.body}`);
             error.responseCode = response.code;
             throw error;
         }
 
         const parsed = JSON.parse(response.body);
-        log.audit({ title: 'Walmart price feed submitted', details: parsed.feedId });
+        log.audit({ title: 'Walmart price & promotion feed submitted', details: parsed.feedId });
         return parsed.feedId;
     }
 
@@ -357,11 +321,11 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
     function getScriptParams() {
         const script = runtime.getCurrentScript();
         return {
-            savedSearchId: script.getParameter({ name: 'custscript_wal_price_feed_saved_search' }),
-            clientId: script.getParameter({ name: 'custscript_wal_price_feed_client_id' }),
-            clientSecret: script.getParameter({ name: 'custscript_wal_price_feed_client_secret' }),
-            environment: script.getParameter({ name: 'custscript_wal_price_feed_env' }) || 'SANDBOX',
-            bucketSize: parseInt(script.getParameter({ name: 'custscript_wal_price_feed_bucket_size' }), 10) || 1000
+            savedSearchId: script.getParameter({ name: PARAMS.SAVED_SEARCH_ID }),
+            clientId: script.getParameter({ name: PARAMS.CLIENT_ID }),
+            clientSecret: script.getParameter({ name: PARAMS.CLIENT_SECRET }),
+            environment: (script.getParameter({ name: PARAMS.ENVIRONMENT }) || 'SANDBOX').toUpperCase(),
+            bucketSize: parseInt(script.getParameter({ name: PARAMS.BUCKET_SIZE }), 10) || 1000
         };
     }
 
@@ -372,7 +336,7 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
     const getInputData = () => {
         const { savedSearchId, bucketSize } = getScriptParams();
         if (!savedSearchId) {
-            throw new Error('Missing required script parameter: custscript_wal_price_feed_saved_search');
+            throw new Error(`Missing required script parameter: ${PARAMS.SAVED_SEARCH_ID}`);
         }
 
         // Populates the bucket-count cache up front (see getNumBuckets())
@@ -391,7 +355,6 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
         const values = result.values;
 
         const sku = getColumnValue(values, COLUMNS.SKU);
-
         const amount = parseFloat(getColumnValue(values, COLUMNS.PRICE)) || 0;
 
         if (!sku) {
@@ -422,14 +385,9 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
 
         const rawItems = context.values.map((v) => JSON.parse(v));
 
-        // TODO: docs don't say if this dupe-SKU-errors behavior is specific
-        // to price feeds or applies to all feed types.
-        // De-dupe by SKU before building the payload, keeping the last
-        // value seen (Walmart errors on any SKU submitted twice in one feed
-        // -- see file header). Defensive, not an expected case, since a
-        // plain Item saved search shouldn't produce duplicate rows for the
-        // same item; logged when it happens so it's visible why a SKU's
-        // price differs from what a given row showed.
+        // De-dupe by SKU before building the payload, keeping the last value
+        // seen -- same defensive guard as wm_mr_price_feed_upload.js (Walmart
+        // errors on any SKU submitted twice in one feed).
         const bySku = new Map();
         rawItems.forEach((item) => {
             if (bySku.has(item.sku)) {
@@ -449,10 +407,10 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
         const accessToken = getAccessToken({ clientId, clientSecret, baseUrl, correlationId });
 
         correlationId = random.generateUUID();
-        
+
         let feedId;
         try {
-            feedId = submitPriceFeed({ accessToken, baseUrl, items, correlationId });
+            feedId = submitPriceFeed({ accessToken, baseUrl, items, headerVersion: HEADER_VERSION, correlationId });
         } catch (e) {
             const status = e.responseCode === 429 ? FEED_STATUS.RATE_LIMITED : FEED_STATUS.ERROR;
             recordFailedFeedSubmission({
@@ -507,7 +465,7 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
         });
 
         log.audit({
-            title: 'Walmart price feed upload summary',
+            title: 'Walmart price & promotion feed upload summary',
             details: `feeds submitted=${feedIds.length}, mapErrors=${mapErrors}, reduceErrors=${reduceErrors}, feedIds=${feedIds.join(', ')}`
         });
     };
