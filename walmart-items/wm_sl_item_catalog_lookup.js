@@ -21,9 +21,8 @@
  * single line (sku/productName/publishedStatus/lifecycleStatus/price)
  * rather than the full raw item, to stay readable and within the Result
  * field's size limit across a whole catalog. The full raw page response is
- * still logged via logHttpResponse() (see wm_sl_item_details.js's header for
- * the "nothing lost" reasoning), so nothing beyond the summary is silently
- * dropped -- just not shown on-screen.
+ * still logged via logHttpResponse(), so nothing beyond the summary is
+ * silently dropped -- just not shown on-screen.
  *
  * SAFETY CAP: MAX_PAGES stops the loop after 200 pages (10,000 items at the
  * max page size) rather than looping unbounded inside one Suitelet request. 

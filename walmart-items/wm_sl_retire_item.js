@@ -72,7 +72,6 @@ define(
             });
         }
 
-        /** Same OAuth client-credentials flow as wm_mr_tire_upload.js / wm_sl_feed_status.js. */
         function getAccessToken(params) {
             const { clientId, clientSecret, baseUrl, correlationId } = params;
 
@@ -146,7 +145,7 @@ define(
         /**
          * Looks up an item directly by SKU or internal ID -- no dependency
          * on the upload saved search, since this tool should work for any
-         * item. Same numeric-vs-text branch as wm_sl_test_upload.js's findItem().
+         * item.
          * @returns {{id: string, sku: string}|null}
          */
         function findItem(lookup) {

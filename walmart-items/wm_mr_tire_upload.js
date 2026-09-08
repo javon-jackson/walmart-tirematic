@@ -8,8 +8,7 @@
  *
  * Field list reconciled against the real Tires item spec (see
  * walmart-spec-output/Tires.json, pulled via POST /v3/items/spec with
- * feedType=MP_ITEM, version=5.0.20260608-18_15_07-api -- confirmed working
- * 2026-07-30 by scripts/fetch-walmart-item-spec.js). See its `required`
+ * feedType=MP_ITEM, version=5.0.20260608-18_15_07-api. See its `required`
  * array for the 25 always-required fields, and its `allOf` block for fields
  * required conditionally:
  *   - tireType in {Passenger Car, Light Truck & SUV, Sport Utility Vehicle,
@@ -24,8 +23,7 @@
  *   - has_written_warranty = "Yes - Warranty Text" also requires warrantyText
  *   - has_written_warranty = "Yes - Warranty URL" also requires warrantyURL
  *   - isProp65WarningRequired = "Yes" also requires prop65WarningText
- *   - certification_type also drives some document-reference fields, not
- *     listed here -- irrelevant unless certification_type is ever set
+ *  
  *
  * Script parameters:
  *   custscript_wal_tireupload_saved_search - internal ID of the tire item saved search
@@ -36,9 +34,8 @@
  *                                          Walmart's MP_ITEM feed max is 10,000 items, <=25MB
  *                                          recommended) -- NOT a bucket count; getNumBuckets() below
  *                                          divides the saved search's total row count (via a cheap
- *                                          count-only query, not a full materialization -- same
- *                                          approach as wm_mr_price_feed_upload.js) by this to compute
- *                                          how many buckets to hash into, so it self-scales as the
+ *                                          count-only query, not a full materialization) by this to
+ *                                          compute how many buckets to hash into, so it self-scales as the
  *                                          catalog grows (replaces the old fixed
  *                                          custscript_wal_num_buckets count)
  *   custscript_wal_prop65_warning_text   - California Prop 65 warning text (Long Text field type;
@@ -145,9 +142,7 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
     // Item mapping: NetSuite Inventory Item -> Walmart MP_ITEM feed entry
     // ---------------------------------------------------------------------
 
-    // Column identifiers map 1:1 to the Walmart schema key each feeds -- see
-    // walmart-spec-output/tires-required-fields.js, the source-of-truth
-    // mapping this was copied from. Fields still blank there stay blank here.
+    // Column identifiers map 1:1 to the Walmart schema
     const COLUMNS = {
         // Fields that feed the Orderable block (pricing, shipping,
         // identifiers -- generic across every product type).
@@ -178,46 +173,37 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
             WHEEL_DIAMETER: 'custitem_ewd_raw_size_3',          // unit in
             TIRE_HEIGHT: 'custitem_ewd_raw_size_4',             // unit in -- only used for LT-Metric sizing, see buildTireSizeString()
             IS_RUN_FLAT: 'custitem_tire_run_flat',
-
             TIRE_SIZE: 'custitem_tire_size_amani',              // TODO: tire size generation assumes 'Radial' construction. included as "Tire Size (Amani Site)" for some tires; built from buildTireSizeString() otherwise.
             DIMENSION_UNIT_TYPE: 'custitem_tire_dim_unit_type', // LT-Metric (IN) / P-Metrics (MM) -- drives buildTireSizeString()'s format
             GROUP: 'custitem_group',                            // model name (e.g. "Ragnarok GTS"), distinct from PRODUCT_NAME/salesdescription's full title -- used as buildShortDescription()'s subject
             TIRE_CLASS: 'custitem_tire_class',                  // LT/P/ST -- merged into tireType via TIRE_CLASS_TO_TIRE_TYPE below
             SECONDARY_IMAGE_FACE: 'CUSTITEM_PRODUCT_IMAGE_RECORD.custrecord_pil_face_jpg',
             SECONDARY_IMAGE_SIDE: 'CUSTITEM_PRODUCT_IMAGE_RECORD.custrecord_pil_side_jpg',
+            MANUFACTURER_PART_NUMBER: 'itemid',
+            TIRE_SEASON: 'custitem_tire_season',                     // TODO: Field added in NetSuite. Data only exists for some tires. 
+            ELECTRIC_VEHICLE_TIRE: 'custitem_electric_vehicle_tire',
+            // has_written_warranty is hardcoded to "Yes - Warranty URL"
+            // keyFeatures has no column -- always synthesized by buildKeyFeatures(), never sourced from NetSuite.
+            // flotation_tire is hardcoded to "No" -- none of our tires are floatation tires.
             
-            // --- Conditionally-required fields (see TIRE_TYPES_REQUIRING_* /
-            // VEHICLE_TYPES_REQUIRING_* above) -- only actually required on
+            // TODO: check with manufacturers for their warning text. Generic warnings are allowed for products manufactured before January 1, 2028. 
+            // After that, there are additional requirements for the warnings. https://www.lawbc.com/proposition-65-oehha-adopts-changes-to-short-form-warning-option/
+            // isProp65WarningRequired is hardcoded to "Yes" 
+
+            // --- Conditionally-required fields -- only actually required on
             // items whose tireType/vehicleType triggers them (buildWalmartItem()).
+            // See header comment for details.
             UNIFORM_TIRE_QUALITY_GRADE: 'custitemutqg',         // TODO: check formatting in netsuite. variety of values in netsuite eg.420A, 560AB, 320 A A, or in some cases a 6 digit number such as 653970
             TIRE_TREADWEAR_RATING: 'custitemutqg',              // numeric portion extracted via extractTreadwearNumber() below
-            MILEAGE_WARRANTY: 'custitem_mileage_warranty',  
-
-            
-            MANUFACTURER_PART_NUMBER: 'itemid',
-            TIRE_SEASON: 'custitem_tire_season',                     // Field added in NetSuite. Data only exists for some tires.             
-            ELECTRIC_VEHICLE_TIRE: 'custitem_electric_vehicle_tire', // checkbox -- see mapCheckboxToYesNo()
-            // has_written_warranty is hardcoded to "Yes - Warranty URL"
-
-            // --- Unconfirmed placeholders -- no NetSuite field chosen yet ---
+            MILEAGE_WARRANTY: 'custitem_mileage_warranty',
             WARRANTY_URL: ''                   // TODO: per-item warranty page URL -- each tire needs its own, not one shared URL
-
-            // keyFeatures has no column -- always synthesized by
-            // buildKeyFeatures(), never sourced from NetSuite.
-
-            // flotation_tire and isProp65WarningRequired are hardcoded in
-            // buildWalmartItem() -- see PROP65_WARNING_TEXT_PARAM below.
-            // has_written_warranty is also hardcoded, but warrantyURL itself
-            // is per-item -- see COLUMNS.VISIBLE.WARRANTY_URL above.
         }
     };
 
     // TODO: Prop65 warning text.
     // isProp65WarningRequired is hardcoded to "Yes" (see buildWalmartItem()),
-    // which makes prop65WarningText required (Tires.json's allOf block). Not
-    // tracked in NetSuite, so it's supplied via a script parameter instead --
-    // create a Long Text parameter named custscript_wal_prop65_warning_text
-    // on the script record (see file header).
+    // which makes prop65WarningText required. Not tracked in NetSuite, so it's 
+    // supplied via a script parameter instead.
     const PROP65_WARNING_TEXT_PARAM = 'custscript_wal_prop65_warning_text';
 
     // https://developer.walmart.com/us-marketplace/docs/item-spec-versioning-and-diff-reporting
@@ -227,8 +213,6 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
     // Conditional-requirement trigger lists (Tires.json's allOf block) and
     // always-required field lists (schema root "required" arrays), used by
     // buildWalmartItem() to both populate and validate the built item.
-    // See walmart-spec-output/conditionally-required-fields.js for the full
-    // writeup of every condition and its current status.
     // ---------------------------------------------------------------------
 
     const TIRE_TYPES_REQUIRING_LOAD_SPEED_CONSTRUCTION = [
@@ -1194,8 +1178,6 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
         const isRunFlat = mapCheckboxToYesNo(getColumnValue(values, COLUMNS.VISIBLE.IS_RUN_FLAT));
         const electric_vehicle_tire = mapCheckboxToYesNo(getColumnValue(values, COLUMNS.VISIBLE.ELECTRIC_VEHICLE_TIRE));
 
-        // Hardcoded -- no NetSuite field for it, and virtually every tire in the
-        // catalog is radial construction anyway (bias-ply is legacy/unused here).
         const constructionType = 'Radial';
         const uniformTireQualityGrade = getColumnValue(values, COLUMNS.VISIBLE.UNIFORM_TIRE_QUALITY_GRADE);
         const tireTreadwearRating = extractTreadwearNumber(getColumnValue(values, COLUMNS.VISIBLE.TIRE_TREADWEAR_RATING));
@@ -1231,9 +1213,7 @@ define(['N/search', 'N/runtime', 'N/log', 'N/https', 'N/encode', 'N/record', 'N/
         const keyFeatures = buildKeyFeatures({ tireType, tireTerrain, tireSpeedRating, tireLoadIndex, tireSeason, isRunFlat });
 
         // --- shortDescription: synthesized from the same translated values
-        // above (see buildShortDescription()), not sourced from NetSuite --
-        // replaces the old raw salesdescription passthrough, which had no
-        // way to reliably clear the schema's minimumWordCount=60.
+        // above (see buildShortDescription()), not sourced from NetSuite.
         const shortDescription = buildShortDescription({
             sku, group, productName, brand, tireSize, tireType, tireTerrain, vehicleType,
             tireSpeedRating, tireLoadIndex, tireSeason, isRunFlat, uniformTireQualityGrade,

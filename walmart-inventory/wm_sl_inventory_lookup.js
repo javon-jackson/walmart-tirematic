@@ -8,8 +8,7 @@
  * /v3/inventory?sku= once per SKU.
  *
  * One SKU's lookup failure doesn't abort the batch -- each is tried
- * independently and its error (if any) shown alongside successful results,
- * same as wm_sl_test_upload_multi.js's per-item not-found handling.
+ * independently and its error (if any) shown alongside successful results.
  *
  *
  * Script parameters:
@@ -83,8 +82,7 @@ define(
         }
 
         /**
-         * Pulls total quantity from a GET /v3/inventory response -- same
-         * shape wm_sl_inventory_update.js's getCurrentQuantity() reads.
+         * Pulls total quantity from a GET /v3/inventory response.
          * @returns {number|undefined}
          */
         function extractQuantity(details) {

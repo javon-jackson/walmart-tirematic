@@ -105,7 +105,7 @@ define(
             return parsed.access_token;
         }
 
-        /** GET /v3/inventory?sku= -- current inventory for one SKU. Same as wm_sl_inventory_lookup.js's version. */
+        /** GET /v3/inventory?sku= -- current inventory for one SKU. */
         function getInventory(params) {
             const { accessToken, baseUrl, sku, correlationId, environment, shipNode } = params;
 

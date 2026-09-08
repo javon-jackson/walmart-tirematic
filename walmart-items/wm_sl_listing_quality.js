@@ -57,7 +57,6 @@ define(
             });
         }
 
-        /** Same OAuth client-credentials flow as the other Walmart scripts in this project. */
         function getAccessToken(params) {
             const { clientId, clientSecret, baseUrl, correlationId } = params;
 

@@ -369,7 +369,7 @@ define(
             });
         }
 
-        /** Stacks every field assigned to it in one column instead of NetSuite's default two-column layout -- same helper as wm_sl_order_shipment.js. */
+        /** Stacks every field assigned to it in one column instead of NetSuite's default two-column layout. */
         function addSingleColumnGroup(form, id) {
             const group = form.addFieldGroup({ id, label: ' ' });
             group.isSingleColumn = true;

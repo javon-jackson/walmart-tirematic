@@ -118,8 +118,7 @@
  *                                              account id (80) for testing -- replace with the real
  *                                              production account id before going live.
  *   custscript_wal_qbo_ap_id                - QBO Account internal id used as every QBO Purchase
- *                                              Order's APAccountRef (one fixed AP account, same
- *                                              assumption qb-online-send-po-sl.js's apAccountRef makes)
+ *                                              Order's APAccountRef (one fixed AP account)
  *                                              TODO: currently set to the SANDBOX Accounts Payable
  *                                              account id (33) for testing -- confirm/replace before
  *                                              going live.
@@ -255,7 +254,7 @@ define(
             }
         }
 
-        /** JSON.parse that logs the raw body before throwing -- same convention as the other Walmart scripts in this project. */
+        /** JSON.parse that logs the raw body before throwing. */
         function safeJsonParse(body, correlationId, context) {
             try {
                 return JSON.parse(body);

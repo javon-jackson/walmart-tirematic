@@ -55,6 +55,7 @@ define(['N/task', 'N/log', 'N/email'], (task, log, email) => {
      * transition via its before/after diff. That diff logic still runs as the
      * safety net for a missed/delayed webhook -- see ALERT_ALREADY_SENT_PARAM.
      */
+    // TODO: Emails are being sent my NetSuite User, but I'm not actually receiving them.
     function sendReturnDeliveredAlertEmail(returnOrderId) {
         try {
             email.send({

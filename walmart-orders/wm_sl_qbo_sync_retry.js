@@ -578,7 +578,6 @@ define(
             return Math.round(value * factor) / factor;
         }
 
-        /** Same US-variant normalization as wm_mr_order_import.js's normalizeCountryCode(). */
         function normalizeCountryCode(rawCountry) {
             const value = String(rawCountry || '').trim().toUpperCase();
             if (!value || value === 'USA' || value === 'US' || value === 'UNITED STATES' || value === 'UNITED STATES OF AMERICA') {
@@ -587,7 +586,6 @@ define(
             return rawCountry;
         }
 
-        /** Same QBO PhysicalAddress builder as wm_mr_order_import.js's buildQboShipAddr(). */
         function buildQboShipAddr(postalAddress) {
             if (!postalAddress || !postalAddress.address1) return null;
 
