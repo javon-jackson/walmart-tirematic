@@ -32,50 +32,7 @@
  * cannot submit an N/task Map/Reduce task ("You do not have permission to
  * perform this operation.").
  */
-define(['N/task', 'N/log', 'N/email'], (task, log, email) => {
-
-    // Set on the dispatched task's params whenever a route's sendDeliveredEmailAlert
-    // fires here, so wm_mr_return_import.js's reduce() knows not to send a
-    // duplicate -- must match PARAMS.ALERT_ALREADY_SENT there exactly.
-    const ALERT_ALREADY_SENT_PARAM = 'custscript_wal_retimp_sent_deliver_alert';
-
-    const RETURN_ALERT_AUTHOR = 126970; // TODO: same placeholder as wm_mr_return_import.js -- set to a real NetSuite employee internal id
-    const RETURN_ALERT_RECIPIENTS = [
-        // 12493, // Nick
-        // 82292, // Moka Kash
-        // 28068, // Camilo Espinosa
-        // 13     // Ricky Chavez
-        126970 // Me
-    ];
-
-    /**
-     * Fast path for RETURN_DELIVERED -- sends the "needs inspection" alert
-     * immediately off the webhook payload alone (no Walmart API call needed),
-     * instead of waiting on the dispatched Map/Reduce task to detect the same
-     * transition via its before/after diff. That diff logic still runs as the
-     * safety net for a missed/delayed webhook -- see ALERT_ALREADY_SENT_PARAM.
-     */
-    // TODO: Emails are being sent my NetSuite User, but I'm not actually receiving them.
-    function sendReturnDeliveredAlertEmail(returnOrderId) {
-        try {
-            email.send({
-                author: RETURN_ALERT_AUTHOR,
-                recipients: RETURN_ALERT_RECIPIENTS,
-                subject: `Walmart Return ${returnOrderId} - Delivered, Needs Inspection`,
-                body: '<html><body>'
-                    + `<p>Return <strong>${returnOrderId}</strong> has arrived at the return center.</p>`
-                    + '<p>Someone needs to physically inspect it (unmounted, unused, within the return window) '
-                    + 'and record the outcome in the return review tool before it can be approved/rejected.</p>'
-                    + '</body></html>'
-            });
-            log.audit({ title: 'Webhook - return-delivered alert email sent', details: JSON.stringify({ returnOrderId }) });
-        } catch (emailError) {
-            log.error({
-                title: 'Webhook - failed to send return-delivered alert email',
-                details: JSON.stringify({ returnOrderId, errorMessage: emailError && emailError.message })
-            });
-        }
-    }
+define(['N/task', 'N/log'], (task, log) => {
 
     /**
      * extractIds(event) returns a string array of ids to dispatch (0, 1, or
@@ -97,20 +54,19 @@ define(['N/task', 'N/log', 'N/email'], (task, log, email) => {
         RETURN_CREATED: {
             scriptId: 'customscript_wal_return_order_import_mr',
             deploymentIds: ['customdeploy_sandbox_1'],
-            idParameter: 'custscript_wal_return_import_retorder_id',
+            idParameter: 'custscript_wal_retimp_retorder_id',
             extractIds: extractReturnOrderIds
         },
         RETURN_DELIVERED: {
             scriptId: 'customscript_wal_return_order_import_mr',
             deploymentIds: ['customdeploy_sandbox_1'],
-            idParameter: 'custscript_wal_return_import_retorder_id',
-            extractIds: extractReturnOrderIds,
-            sendDeliveredEmailAlert: true
+            idParameter: 'custscript_wal_retimp_retorder_id',
+            extractIds: extractReturnOrderIds
         },
         RETURN_INVOICED: {
             scriptId: 'customscript_wal_return_order_import_mr',
             deploymentIds: ['customdeploy_sandbox_1'],
-            idParameter: 'custscript_wal_return_import_retorder_id',
+            idParameter: 'custscript_wal_retimp_retorder_id',
             extractIds: extractReturnOrderIds
         }
     };
@@ -174,7 +130,6 @@ define(['N/task', 'N/log', 'N/email'], (task, log, email) => {
         }
 
         ids.forEach((id) => {
-            if (route.sendDeliveredEmailAlert) sendReturnDeliveredAlertEmail(id);
             submitTaskIfEligible({ route, eventType, id });
         });
         context.response.write(JSON.stringify({ received: true }));
@@ -190,7 +145,6 @@ define(['N/task', 'N/log', 'N/email'], (task, log, email) => {
             try {
                 const taskParams = {};
                 taskParams[route.idParameter] = id;
-                if (route.sendDeliveredEmailAlert) taskParams[ALERT_ALREADY_SENT_PARAM] = 'T';
 
                 const taskId = task.create({
                     taskType: task.TaskType.MAP_REDUCE,

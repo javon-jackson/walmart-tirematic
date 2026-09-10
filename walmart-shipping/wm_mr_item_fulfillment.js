@@ -1,13 +1,19 @@
 /**
  * @NApiVersion 2.1
  * @NScriptType MapReduceScript
- * 
- * Walmart Item Fulfillment Queue Processor
- * TODO: currently only handles fulfillments with one item line.
- * Need a way to map skus to their tracking numbers. Needs to make a Walmart API req for each package/tracking num.
  *
+ * Walmart Item Fulfillment Queue Processor
+ *
+ * The packages sublist only gives us a tracking number + weight per package,
+ * not which item(s) are actually in it. Since these are tires shipped one per
+ * package, each package's weight is matched against the fulfillment's item
+ * lines by their per-unit weight (from the item record) instead. A package
+ * is only assigned to a line when exactly one line's weight falls within
+ * WEIGHT_TOLERANCE of that package's weight -- if two lines are close enough
+ * in weight to both qualify, or no line qualifies, the fulfillment errors out
+ * for manual review rather than guessing which SKU shipped in that box.
  */
-define(['N/record', 'N/search', 'N/runtime', 'N/https', 'N/encode', 'N/crypto/random'], 
+define(['N/record', 'N/search', 'N/runtime', 'N/https', 'N/encode', 'N/crypto/random'],
     (record, search, runtime, https, encode, random) => {
 
     const QUEUE_RECORD = {
@@ -34,18 +40,26 @@ define(['N/record', 'N/search', 'N/runtime', 'N/https', 'N/encode', 'N/crypto/ra
     };
 
     const TRACKING_NUM_FIELD = 'packagetrackingnumber';
-    
+    const PACKAGE_WEIGHT_FIELD = 'packageweight';
+
+    // How close (in the item record's weight units) a package's weight must be
+    // to an item's unit weight to count as a match. Covers scale rounding, not
+    // meant to absorb a real difference between two distinct tire SKUs.
+    const WEIGHT_TOLERANCE = 0.5;
+
     // TODO: Find the expected values for this field and map them to Walmarts expected carriers.
-    // Valid entries are: UPS, USPS, FedEx, Airborne, OnTrac, DHL Ecommerce - US, DHL, 
-    // LS (LaserShip), UDS (United Delivery Service), UPSMI (UPS Mail Innovations), 
-    // FDX, PILOT, ESTES, SAIA, FDS Express, Seko Worldwide, HIT Delivery, FEDEXSP (FedEx SmartPost), 
-    // RL Carriers, Metropolitan Warehouse & Delivery, China Post, YunExpress,Yellow Freight Sys, 
-    // AIT Worldwide Logistics, Chukou1, Sendle, Landmark Global, Sunyou, Yanwen, 4PX, GLS, OSM Worldwide, 
-    // FIRST MILE, AM Trucking, CEVA, India Post, SF Express, CNE, TForce Freight, AxleHire, LSO, Royal Mail, 
-    // ABF Freight System, WanB, Roadrunner Freight, Meyer Distribution, AAA Cooper, Canada Post, 
-    // Southeastern Freight Lines, Japan Post, Correos de Mexico, XPO Logistics, JD Logistics, YDH, JCEX, Flyt, 
-    // Deutsche Post, Better Trucks, Asendia, SFC, UBI, ePost Global, YF Logistics, RXO, Estes Express, Shypmax, 
-    // WIN.IT America, PITT OHIO, PostNord Sweden, Equick, Whistl, Tusou, Shiprocket, USPS First Class Mail, DTDC, 
+    // NOTE: Currently handled by checking if the carrier field includes text indicating the carrier is either
+    //       FedEx, UPS, or USPS.
+    // Valid entries are: UPS, USPS, FedEx, Airborne, OnTrac, DHL Ecommerce - US, DHL,
+    // LS (LaserShip), UDS (United Delivery Service), UPSMI (UPS Mail Innovations),
+    // FDX, PILOT, ESTES, SAIA, FDS Express, Seko Worldwide, HIT Delivery, FEDEXSP (FedEx SmartPost),
+    // RL Carriers, Metropolitan Warehouse & Delivery, China Post, YunExpress,Yellow Freight Sys,
+    // AIT Worldwide Logistics, Chukou1, Sendle, Landmark Global, Sunyou, Yanwen, 4PX, GLS, OSM Worldwide,
+    // FIRST MILE, AM Trucking, CEVA, India Post, SF Express, CNE, TForce Freight, AxleHire, LSO, Royal Mail,
+    // ABF Freight System, WanB, Roadrunner Freight, Meyer Distribution, AAA Cooper, Canada Post,
+    // Southeastern Freight Lines, Japan Post, Correos de Mexico, XPO Logistics, JD Logistics, YDH, JCEX, Flyt,
+    // Deutsche Post, Better Trucks, Asendia, SFC, UBI, ePost Global, YF Logistics, RXO, Estes Express, Shypmax,
+    // WIN.IT America, PITT OHIO, PostNord Sweden, Equick, Whistl, Tusou, Shiprocket, USPS First Class Mail, DTDC,
     // PTS.
     const SHIPPING_CARRIER_FIELD = 'custbody_pacejet_shipped_method';
 
@@ -54,7 +68,7 @@ define(['N/record', 'N/search', 'N/runtime', 'N/https', 'N/encode', 'N/crypto/ra
         return {
             clientId: script.getParameter({ name: SCRIPT_PARAMS.CLIENT_ID }),
             clientSecret: script.getParameter({ name: SCRIPT_PARAMS.CLIENT_SECRET }),
-            environment: (script.getParameter({ name: SCRIPT_PARAMS.ENVIRONMENT }) || 'SANDBOX').toUpperCase() 
+            environment: (script.getParameter({ name: SCRIPT_PARAMS.ENVIRONMENT }) || 'SANDBOX').toUpperCase()
         }
     }
 
@@ -94,11 +108,26 @@ define(['N/record', 'N/search', 'N/runtime', 'N/https', 'N/encode', 'N/crypto/ra
             const accessToken = getWalmartAccessToken({ clientId: ctx.clientId, clientSecret: ctx.clientSecret, baseUrl, correlationId});
             const orderDetails = getOrderDetails({ accessToken, baseUrl, purchaseOrderId, correlationId, environment: env });
             // TODO: Currently only handles one carrier per fulfillment record.
-            const shippingCarrier = fulfillmentRecord.getValue({ fieldId: SHIPPING_CARRIER_FIELD });
+            let shippingCarrier = null;
+            const rawShippingCarrier = (fulfillmentRecord.getValue({ fieldId: SHIPPING_CARRIER_FIELD })).toLowerCase();
+            if (rawShippingCarrier.includes("fedex")) {
+                shippingCarrier = "FedEx";
+            } else if (rawShippingCarrier.includes("usps")) {
+                shippingCarrier = "USPS";
+            } else if (rawShippingCarrier.includes("ups")) {
+                shippingCarrier = "UPS";
+            } else {
+                throw new Error(`Unrecognized shipping carrier ${rawShippingCarrier}.`);
+            }
+
             const shipDateTime = Date.now();
 
-            const payload = buildShipmentPayload({ fulfillmentRecord, orderDetails, shipDateTime, carrier: shippingCarrier});
-            
+            const itemLines = getFulfillmentItemLines(fulfillmentRecord);
+            const packages = getFulfillmentPackages(fulfillmentRecord);
+            const matches = matchPackagesToItemLines(packages, itemLines);
+
+            const payload = buildShipmentPayload({ orderDetails, matches, shipDateTime, carrier: shippingCarrier});
+
             submitShippingConfirmation({ accessToken, baseUrl, purchaseOrderId, correlationId, environment: env, payload });
 
             updateQueueRecord({ queueRecordId, status: 'Complete' });
@@ -206,19 +235,26 @@ define(['N/record', 'N/search', 'N/runtime', 'N/https', 'N/encode', 'N/crypto/ra
             return parsed.order;
     }
 
+    /**
+     * One orderLineStatus entry per matched package, grouped by Walmart
+     * lineNumber -- a line whose quantity spanned multiple packages (several
+     * tires, same SKU) gets multiple entries under that same lineNumber, each
+     * with that specific package's own trackingInfo.
+     */
     function buildShipmentPayload(params) {
-        const { fulfillmentRecord, orderDetails, shipDateTime, carrier } = params;
+        const { orderDetails, matches, shipDateTime, carrier } = params;
 
-        const { sku } = getFulfillmentLine(fulfillmentRecord);
         const lineNumbersBySku = buildLineNumbersBySku(orderDetails);
-        const lineNumber = lineNumbersBySku[sku];
-        if (!lineNumber) {
-                throw new Error(`SKU ${sku} not found in Walmart order details.`)
-        }
-        
-        const packages = getFulfillmentPackages(fulfillmentRecord);
-        const orderLineStatus = packages.map((pkg) => (
-            {
+        const methodCode = orderDetails.shippingInfo && orderDetails.shippingInfo.methodCode;
+
+        const statusesByLineNumber = {};
+        matches.forEach((match) => {
+            const lineNumber = lineNumbersBySku[match.sku];
+            if (!lineNumber) {
+                throw new Error(`SKU ${match.sku} not found in Walmart order details.`);
+            }
+            if (!statusesByLineNumber[lineNumber]) statusesByLineNumber[lineNumber] = [];
+            statusesByLineNumber[lineNumber].push({
                 status: 'Shipped',
                 statusQuantity: {
                     unitOfMeasurement: 'EACH',
@@ -226,21 +262,24 @@ define(['N/record', 'N/search', 'N/runtime', 'N/https', 'N/encode', 'N/crypto/ra
                 },
                 trackingInfo: {
                     shipDateTime,
+                    methodCode,
                     carrierName: { carrier },
-                    trackingNumber: pkg.trackingNum
+                    trackingNumber: match.trackingNum
                 }
+            });
+        });
+
+        const orderLine = Object.keys(statusesByLineNumber).map((lineNumber) => ({
+            lineNumber,
+            orderLineStatuses: {
+                orderLineStatus: statusesByLineNumber[lineNumber]
             }
-        ));
+        }));
 
         return {
             orderShipment: {
                 orderLines: {
-                    orderLine: [{
-                        lineNumber,
-                        orderLineStatuses: {
-                            orderLineStatus
-                        }
-                    }]
+                    orderLine
                 }
             }
         }
@@ -269,29 +308,16 @@ define(['N/record', 'N/search', 'N/runtime', 'N/https', 'N/encode', 'N/crypto/ra
             return safeJsonParse(response.body, correlationId, 'shipping confirmation');
     }
 
-    function findItemSkuByInternalId(itemInternalId) {
+    function lookupItemDetails(itemInternalId) {
         if (!itemInternalId) return null;
         const result = search.lookupFields({
             type: search.Type.ITEM,
             id: itemInternalId,
-            columns: ['itemid']
+            columns: ['itemid', 'weight']
         });
-        return result.itemid || null;
+        if (!result.itemid) return null;
+        return { sku: result.itemid, weight: Number(result.weight) };
     }
-
-    // function getFulfillmentLines(fulfillmentRecord) {
-    //     const lines = [];
-    //     const lineCount = fulfillmentRecord.getLineCount({ sublistId: 'item' });
-    //     for (let i = 0; i < lineCount; i++) {
-    //         const itemInternalId = fulfillmentRecord.getSublistValue({ sublistId: 'item', line: i, fieldId: 'item' });
-    //         const sku = findItemSkuByInternalId(itemInternalId);
-    //         const quantity = fulfillmentRecord.getSublistValue({ sublistId: 'item', line: i, fieldId: 'quantity'});
-    //         if (sku && quantity) {
-    //             lines.push({ sku, quantity: Number(quantity)});
-    //         }
-    //     }
-    //     return lines;
-    // }
 
     function buildLineNumbersBySku(orderDetails) {
         const orderLines = (orderDetails.orderLines && orderDetails.orderLines.orderLine) || [];
@@ -306,29 +332,77 @@ define(['N/record', 'N/search', 'N/runtime', 'N/https', 'N/encode', 'N/crypto/ra
         return lineNumbersBySku;
     }
 
-    // TODO: currently only wired to handle one item line. Need a way to map each item to tracking number.
-    // If only one item line theres only one sku, so each sku can use any of the tracking numbers.
-    function getFulfillmentLine(fulfillmentRecord) {
+    /** One entry per item line, with that item's per-unit weight (from the item record) and quantity ordered. */
+    function getFulfillmentItemLines(fulfillmentRecord) {
+        const linesBySku = {};
         const lineCount = fulfillmentRecord.getLineCount({ sublistId: 'item' });
-        if (lineCount !== 1) {
-            throw new Error(`Expected one item line. Found ${lineCount}`);
+        for (let i = 0; i < lineCount; i++) {
+            const itemInternalId = fulfillmentRecord.getSublistValue({ sublistId: 'item', line: i, fieldId: 'item' });
+            const quantity = Number(fulfillmentRecord.getSublistValue({ sublistId: 'item', line: i, fieldId: 'quantity' }));
+            const itemDetails = lookupItemDetails(itemInternalId);
+            if (!itemDetails || !quantity) continue;
+
+            if (!linesBySku[itemDetails.sku]) {
+                linesBySku[itemDetails.sku] = { sku: itemDetails.sku, weight: itemDetails.weight, quantity: 0 };
+            }
+            linesBySku[itemDetails.sku].quantity += quantity;
         }
-        const itemInternalId = fulfillmentRecord.getSublistValue({ sublistId: 'item', line: 0, fieldId: 'item' });
-        const itemSku = findItemSkuByInternalId(itemInternalId);
-        return { sku: itemSku };
+        return Object.values(linesBySku);
     }
 
-    // Get tracking numbers for all packages
+    /** Tracking number + weight per package -- no item content info available. */
     function getFulfillmentPackages(fulfillmentRecord) {
         const packages = [];
         const packageCount = fulfillmentRecord.getLineCount({ sublistId: 'package' });
         for (let i = 0; i < packageCount; i++) {
             const trackingNum = fulfillmentRecord.getSublistValue({ sublistId: 'package', line: i, fieldId: TRACKING_NUM_FIELD });
-            if (trackingNum) {
-                packages.push({ trackingNum });
+            const weight = Number(fulfillmentRecord.getSublistValue({ sublistId: 'package', line: i, fieldId: PACKAGE_WEIGHT_FIELD }));
+            if (trackingNum && weight) {
+                packages.push({ trackingNum, weight });
             }
         }
         return packages;
+    }
+
+    /**
+     * Matches each package to an item line by weight (one tire per package,
+     * so package weight ~= that tire's unit weight). Multiple lines with the
+     * same or close weight is expected (e.g. several tires of similar size
+     * in one order) -- when more than one line with remaining quantity falls
+     * within WEIGHT_TOLERANCE, the closest weight match wins, with ties
+     * broken by item line order. Only a package matching zero lines errors
+     * out, since there's nothing reasonable left to guess at that point.
+     */
+    function matchPackagesToItemLines(packages, itemLines) {
+        const remainingQtyBySku = {};
+        itemLines.forEach((line) => {
+            remainingQtyBySku[line.sku] = line.quantity;
+        });
+
+        const matches = packages.map((pkg) => {
+            const candidates = itemLines.filter((line) => (
+                remainingQtyBySku[line.sku] > 0 &&
+                Math.abs(line.weight - pkg.weight) <= WEIGHT_TOLERANCE
+            ));
+
+            if (candidates.length === 0) {
+                throw new Error(`No item weight matches package weight ${pkg.weight} (trackingNum=${pkg.trackingNum}).`);
+            }
+
+            const closest = candidates.reduce((best, line) => (
+                Math.abs(line.weight - pkg.weight) < Math.abs(best.weight - pkg.weight) ? line : best
+            ));
+
+            remainingQtyBySku[closest.sku] -= 1;
+            return { sku: closest.sku, trackingNum: pkg.trackingNum };
+        });
+
+        const unmatchedSkus = Object.keys(remainingQtyBySku).filter((sku) => remainingQtyBySku[sku] > 0);
+        if (unmatchedSkus.length > 0) {
+            throw new Error(`No package matched for item(s): ${unmatchedSkus.join(', ')}.`);
+        }
+
+        return matches;
     }
 
     return {

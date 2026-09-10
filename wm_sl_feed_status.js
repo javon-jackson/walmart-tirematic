@@ -147,7 +147,7 @@ define(
                     'WM_QOS.CORRELATION_ID': correlationId,
                     'WM_SVC.NAME': 'Walmart Marketplace',
                     'Accept': 'application/json',
-                    // TODO: with the 2 headers below, status checks return PROCESSED
+                    // NOTE: with the 2 headers below, status checks return PROCESSED
                     // but always the same wrong feedId; without them, ERROR but the
                     // correct feedId. Possibly mismatched global/US-sandbox canned
                     // responses -- unresolved.

@@ -167,7 +167,7 @@ define(['N/runtime', 'N/https', 'N/encode', 'N/log', 'N/crypto/random', 'N/ui/se
         const group = addSingleColumnGroup(form, 'custpage_fields_group');
 
         addTextField(form, group, 'custpage_ship_node_name', 'Facility Name', p.custpage_ship_node_name, true);
-        addTextField(form, group, 'custpage_custom_node_id', 'Custom Node ID', p.custpage_custom_node_id, true);
+        addTextField(form, group, 'custpage_custom_node_id', 'Custom Node ID', p.custpage_custom_node_id, true); // TODO: required for sandbox, but not marked as required in docs https://developer.walmart.com/us-marketplace/reference/createfulfillmentcenter
 
         const statusField = form.addField({ id: 'custpage_status', type: serverWidget.FieldType.SELECT, label: 'Status', container: group });
         Object.keys(STATUSES).forEach((value) => statusField.addSelectOption({ value, text: STATUSES[value] }));
@@ -231,15 +231,12 @@ define(['N/runtime', 'N/https', 'N/encode', 'N/log', 'N/crypto/random', 'N/ui/se
         // const calendarField = form.addField({ id: 'custpage_configure_calendar', type: serverWidget.FieldType.CHECKBOX, label: 'Configure Processing Schedule', container: group });
         // calendarField.defaultValue = p.custpage_configure_calendar === 'T' ? 'T' : 'F';
 
+        
         const calendarField = form.addField({ id: 'custpage_configure_calendar', type: serverWidget.FieldType.SELECT, label: 'Configure Processing Schedule', container: group });
         calendarField.addSelectOption({ value: 'T', text: 'Yes' });
         calendarField.addSelectOption({ value: 'F', text: 'No' });
         calendarField.defaultValue = p.custpage_configure_calendar === 'T' ? 'T' : 'F';
         calendarField.isMandatory = true;
-
-        const calendarHelpField = form.addField({ id: 'custpage_calendar_help', type: serverWidget.FieldType.INLINEHTML, label: ' ', container: group });
-        calendarHelpField.defaultValue = '<p style="color:#666;font-size:13px;">If Yes, set which days this facility processes orders and '
-            + `each day's cutoff time. Leave as No to omit this from the request entirely.</p>`;
 
         DAYS_OF_WEEK.forEach((day) => {
             const dayDividerField = form.addField({
